@@ -10,7 +10,7 @@ namespace custom.backoffice.graphql
 @type Object
 @author GraphQL Engine Team
 @since 2.0.0
-@desc GqlPlayground â€” generates self-contained interactive HTML for GraphQL exploration
+@desc GqlPlayground — generates self-contained interactive HTML for GraphQL exploration
 /@*/
 class GqlPlayground
     private data oSchema  as object
@@ -21,10 +21,10 @@ class GqlPlayground
     @type Method
     @author GraphQL Engine Team
     @since 2.0.0
-    @param oSchema  Object â€” GqlSchema instance
-    @param oConfig  Object â€” GqlConfig instance
-    @param cBaseUrl Character â€” base URL for fetch calls (e.g., "/rest")
-    @return Object  â€” self
+    @param oSchema  Object — GqlSchema instance
+    @param oConfig  Object — GqlConfig instance
+    @param cBaseUrl Character — base URL for fetch calls (e.g., "/rest")
+    @return Object  — self
     /@*/
     method new(oSchema as object, oConfig as object, cBaseUrl as character) as object class GqlPlayground
         ::oSchema  := oSchema
@@ -37,7 +37,7 @@ class GqlPlayground
     @type Method
     @author GraphQL Engine Team
     @since 2.0.0
-    @return Character â€” complete HTML document as string
+    @return Character — complete HTML document as string
     /@*/
     method render() as character class GqlPlayground
         local aTypes   := {} as array
@@ -64,8 +64,8 @@ class GqlPlayground
         for nI := 1 to len(aMods)
             cMod   := aMods[nI]
             cCap   := upper(substr(cMod, 1, 1)) + substr(cMod, 2)
-            cExamples += "<div class='example' data-query='{ list" + cCap + "(primeiro: 5) { __typename } }'>" + cCap + " â€” list (first 5)</div>"
-            cExamples += "<div class='example' data-query='{ find" + cCap + "(codigo: ""000001"") { __typename codigo } }'>" + cCap + " â€” find by code</div>"
+            cExamples += "<div class='example' data-query='{ list" + cCap + "(primeiro: 5) { __typename } }'>" + cCap + " — list (first 5)</div>"
+            cExamples += "<div class='example' data-query='{ find" + cCap + "(codigo: ""000001"") { __typename codigo } }'>" + cCap + " — find by code</div>"
         next nI
 
         return ::buildHtml(aTypes, cModList, cExamples)
@@ -75,10 +75,10 @@ class GqlPlayground
     @type Method
     @author GraphQL Engine Team
     @since 2.0.0
-    @param aTypes    Array  â€” list of type names from schema
-    @param cModList  Character â€” sidebar HTML with type list
-    @param cExamples Character â€” examples HTML
-    @return Character â€” complete HTML document
+    @param aTypes    Array  — list of type names from schema
+    @param cModList  Character — sidebar HTML with type list
+    @param cExamples Character — examples HTML
+    @return Character — complete HTML document
     /@*/
     method buildHtml(aTypes as array, cModList as character, cExamples as character) as character class GqlPlayground
         local nTypeCount as numeric := len(aTypes)
@@ -105,7 +105,7 @@ class GqlPlayground
                "<head>" + CRLF + ;
                "  <meta charset='UTF-8'>" + CRLF + ;
                "  <meta name='viewport' content='width=device-width, initial-scale=1.0'>" + CRLF + ;
-               "  <title>GraphQL Protheus â€” Playground</title>" + CRLF + ;
+               "  <title>GraphQL Protheus — Playground</title>" + CRLF + ;
                "  <style>" + CRLF + ;
                ::getCss() + ;
                "  </style>" + CRLF + ;
@@ -115,13 +115,13 @@ class GqlPlayground
                "    <header class='header'>" + CRLF + ;
                "      <h1>GraphQL Protheus</h1>" + CRLF + ;
                "      <div class='badge'>Protheus 12.1.2510</div>" + CRLF + ;
-               "      <div class='stats'>" + cValToChar(nModCount) + " mÃ³dulos | " + cValToChar(nTypeCount) + " tipos | " + cAuto + " | " + cLog + "</div>" + CRLF + ;
+               "      <div class='stats'>" + cValToChar(nModCount) + " módulos | " + cValToChar(nTypeCount) + " tipos | " + cAuto + " | " + cLog + "</div>" + CRLF + ;
                "    </header>" + CRLF + ;
                "    <div class='main'>" + CRLF + ;
                "      <aside class='sidebar'>" + CRLF + ;
                "        <h3>Tipos</h3>" + CRLF + ;
                cModList + ;
-               "        <h3>MÃ³dulos</h3>" + CRLF + ;
+               "        <h3>Módulos</h3>" + CRLF + ;
                ::buildModuleList() + ;
                "      </aside>" + CRLF + ;
                "      <main class='content'>" + CRLF + ;
@@ -156,7 +156,7 @@ class GqlPlayground
     @type Method
     @author GraphQL Engine Team
     @since 2.0.0
-    @return Character â€” CSS styles (inline, no external dependencies)
+    @return Character — CSS styles (inline, no external dependencies)
     /@*/
     method getCss() as character class GqlPlayground
         return "
@@ -199,7 +199,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     @type Method
     @author GraphQL Engine Team
     @since 2.0.0
-    @return Character â€” JavaScript (inline, no external dependencies)
+    @return Character — JavaScript (inline, no external dependencies)
     /@*/
     method getJs() as character class GqlPlayground
         local cEndpoint as character
@@ -280,7 +280,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
     @type Method
     @author GraphQL Engine Team
     @since 2.0.0
-    @return Character â€” HTML for module list in sidebar
+    @return Character — HTML for module list in sidebar
     /@*/
     method buildModuleList() as character class GqlPlayground
         local aMods   as array  := ::oConfig:getModuleKeys()
