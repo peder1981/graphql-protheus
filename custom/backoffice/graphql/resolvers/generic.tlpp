@@ -1,9 +1,9 @@
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "gqltypes.tlpp"
-#include "gqlschema.tlpp"
+#include "types.tlpp"
+#include "schema.tlpp"
 
-namespace custom.graphql
+namespace custom.backoffice.graphql
 
 // --------------------------------------------------------------------------
 // GqlGenericResolver — dynamically creates list/find resolvers from a

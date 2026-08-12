@@ -1,10 +1,10 @@
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "gqltypes.tlpp"
-#include "gqlschema.tlpp"
-#include "gqlvalidator.tlpp"
+#include "types.tlpp"
+#include "schema.tlpp"
+#include "validator.tlpp"
 
-namespace custom.graphql
+namespace custom.backoffice.graphql
 
 // --------------------------------------------------------------------------
 // GqlExecutor — executes a parsed GraphQL AST against a schema

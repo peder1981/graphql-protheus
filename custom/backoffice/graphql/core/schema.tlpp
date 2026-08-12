@@ -1,8 +1,8 @@
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "gqltypes.tlpp"
+#include "types.tlpp"
 
-namespace custom.graphql
+namespace custom.backoffice.graphql
 
 // --------------------------------------------------------------------------
 // GqlSchema - central registry for all GraphQL types

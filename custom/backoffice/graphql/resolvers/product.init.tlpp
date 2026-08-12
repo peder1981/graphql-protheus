@@ -1,9 +1,9 @@
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "gqltypes.tlpp"
-#include "gqlschema.tlpp"
+#include "types.tlpp"
+#include "schema.tlpp"
 
-namespace custom.graphql
+namespace custom.backoffice.graphql
 
 // --------------------------------------------------------------------------
 // initSB1Schema — inicializa o schema SB1 (produtos) no GqlSchema

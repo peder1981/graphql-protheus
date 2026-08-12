@@ -1,7 +1,7 @@
 #include "tlpp-core.th"
 #include "totvs.ch"
 
-namespace custom.graphql
+namespace custom.backoffice.graphql
 
 // --------------------------------------------------------------------------
 // GqlParser - Lexer + Parser for GraphQL queries

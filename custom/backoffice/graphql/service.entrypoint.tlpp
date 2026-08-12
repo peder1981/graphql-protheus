@@ -1,11 +1,11 @@
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "gqltypes.tlpp"
-#include "gqlschema.tlpp"
-#include "gqlparser.tlpp"
-#include "gqlvalidator.tlpp"
-#include "gqlexecutor.tlpp"
-#include "gqlexecutive.tlpp"
+#include "types.tlpp"
+#include "schema.tlpp"
+#include "parser.tlpp"
+#include "validator.tlpp"
+#include "executor.tlpp"
+#include "executive.tlpp"
 
 /*/{Protheus.doc}
 User Function GQLSERVICE
@@ -18,7 +18,7 @@ User Function GQLSERVICE
       /{Protheus.doc}
 
 User Function GQLSERVICE()
-    local oExecutive := custom.graphql.GqlExecutive():new()
+    local oExecutive := custom.backoffice.graphql.GqlExecutive():new()
     local cQuery     := "" as character
     local cFilial    := "" as character
     local oResult    := nil as object
