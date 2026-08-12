@@ -6,6 +6,8 @@
 #include "validator.tlpp"
 #include "executor.tlpp"
 #include "executive.tlpp"
+#include "config.tlpp"
+#include "autodiscover.tlpp"
 
 /*/{Protheus.doc}
 User Function GQLSERVICE
@@ -37,10 +39,21 @@ User Function GQLSERVICE()
 
     oExecutive:setDefaultFilial(cFilial)
 
-    // Register default modules
-    oExecutive:registerModule("SA1", "Cliente", {"A1_COD", "A1_NOME", "A1_END", "A1_BAIRRO", "A1_CIDADE", "A1_ESTADO", "A1_FONE", "A1_TIPO", "A1_INSCRM", "A1_CGC"})
-    oExecutive:registerModule("SB1", "Produto", {"B1_COD", "B1_DESC", "B1_VALID", "B1_UM", "B1_CODBARRA", "B1_LOCPAD"})
-    oExecutive:registerModule("SC5", "NotaFiscal", {"C5_NUM", "C5_EMISSAO", "C5_SERIE", "C5_CLIENTE", "C5_SERIECF"})
+    // Try config-driven registration first
+    local oConfigCheck := custom.backoffice.graphql.GqlConfig():new()
+    local aConfigMods  := oConfigCheck:getModuleKeys()
+
+    if len(aConfigMods) > 0
+        // Config-driven: modules defined in appserver.ini
+        oExecutive:loadFromConfig()
+        FWLogMsg("GQLSERVICE: loaded " + cValToChar(len(aConfigMods)) + " modules from config", .T.)
+    else
+        // Fallback: hardcoded defaults for backward compatibility
+        oExecutive:registerModule("SA1", "Cliente", {"A1_COD", "A1_NOME", "A1_END", "A1_BAIRRO", "A1_CIDADE", "A1_ESTADO", "A1_FONE", "A1_TIPO", "A1_INSCRM", "A1_CGC"})
+        oExecutive:registerModule("SB1", "Produto", {"B1_COD", "B1_DESC", "B1_VALID", "B1_UM", "B1_CODBARRA", "B1_LOCPAD"})
+        oExecutive:registerModule("SC5", "NotaFiscal", {"C5_NUM", "C5_EMISSAO", "C5_SERIE", "C5_CLIENTE", "C5_SERIECF"})
+        FWLogMsg("GQLSERVICE: using hardcoded default modules (no config found)", .F.)
+    endif
 
     // Execute or introspect
     if empty(cQuery)
