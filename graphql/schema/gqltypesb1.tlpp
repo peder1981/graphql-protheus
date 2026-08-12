@@ -1,0 +1,226 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "gqltypes.tlpp"
+#include "gqlschema.tlpp"
+
+namespace custom.graphql
+
+// --------------------------------------------------------------------------
+// buildProductType — cria o GqlObjectType "Produto" mapeado para SB1
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@param oSchema Object - instância de GqlSchema
+@return Object - GqlObjectType "Produto" registrado
+@type Function
+/*@*/
+static function buildProductType(oSchema as object) as object
+    local oType   as object
+    local oField  as object
+    local cTable  as character
+    local cDesc   as character
+
+    oType := GqlObjectType():new("Produto", "SB1", "Tabela de produtos (SB1)")
+
+    // codigo -> B1_COD
+    oField := GqlField():new("codigo", GqlScalarType():new("String", "C", "Codigo do produto"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "B1_COD") })
+    oField:addArg("codigo", GqlScalarType():new("String", "C", "Codigo do produto"), nil)
+    oType:addField(oField)
+
+    // descricao -> B1_DESC
+    oField := GqlField():new("descricao", GqlScalarType():new("String", "C", "Descricao do produto"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "B1_DESC") })
+    oType:addField(oField)
+
+    // validade -> B1_VALID (data)
+    oField := GqlField():new("validade", GqlScalarType():new("String", "D", "Data de validade do produto"), {|oParent, oArgs, oSch, cFil| local cVal := JsonGet(oParent, "B1_VALID"); if valtype(cVal) == "D"; return dValToChar(cVal, "YMD"); else; return ""; endIf })
+    oType:addField(oField)
+
+    // unidademedida -> B1_UM
+    oField := GqlField():new("unidademedida", GqlScalarType():new("String", "C", "Unidade de medida"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "B1_UM") })
+    oType:addField(oField)
+
+    // codigobarras -> B1_CODBARRA
+    oField := GqlField():new("codigobarras", GqlScalarType():new("String", "C", "Codigo de barras"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "B1_CODBARRA") })
+    oType:addField(oField)
+
+    // localizacao -> B1_LOCPAD
+    oField := GqlField():new("localizacao", GqlScalarType():new("String", "C", "Localizacao padrao"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "B1_LOCPAD") })
+    oType:addField(oField)
+
+    oSchema:registerType(oType)
+    FWLogMsg("buildProductType: Produto type registered", .T.)
+    return oType
+endfunction
+
+// --------------------------------------------------------------------------
+// buildProductQueryFields — adiciona findProduto e listProdutos ao Query
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@param oSchema Object - instância de GqlSchema
+@return Object - GqlQueryType atualizado
+@type Function
+/*@*/
+static function buildProductQueryFields(oSchema as object) as object
+    local oQuery   as object
+    local oProd    as object
+    local oField   as object
+    local cFilial  as character
+    local cTable   as character
+    local bFind    as codeblock
+    local bList    as codeblock
+
+    oQuery := oSchema:getQueryType()
+    oProd  := oSchema:getType("Produto")
+
+    if oProd == nil
+        FWLogMsg("buildProductQueryFields: Produto type not found in schema", .F.)
+        return oQuery
+    endif
+
+    cFilial := xFilial("SB1")
+    cTable  := RetSqlName("SB1")
+
+    // --------------------------------------------------------------
+    // findProduto(codigo: String!): Produto
+    // --------------------------------------------------------------
+    bFind := {|oParent, oArgs, oSch, cFil|;
+        local cCodigo  as character
+        local cSQL     as character
+        local oResult  as json
+        local oRow     as json
+        local nIdx     as numeric
+        local cVal     as character
+        local aKeys    as array
+        local nI       as numeric
+        local nCount   as numeric
+        local cFilUsed as character
+        local oQ       as object
+
+        cCodigo  := JsonGet(oArgs, "codigo")
+        if cCodigo == nil .or. cCodigo == ""
+            oResult := JsonParse("{}")
+            return oResult
+        endif
+
+        if cFil != nil .and. cFil != ""
+            cFilUsed := cFil
+        else
+            cFilUsed := cFilial
+        endif
+
+        cSQL := "SELECT B1_COD, B1_DESC, B1_VALID, B1_UM, B1_CODBARRA, B1_LOCPAD " +;
+            "FROM " + cTable + " " +;
+            "WHERE B1_FILIAL = '" + cFilUsed + "' " +;
+            "AND B1_COD = '" + cCodigo + "' " +;
+            "AND B1_DELET = ' ' " +;
+            "%nolock%"
+
+        oResult := JsonParse("{}")
+        oQ := TCQuery(cSQL):Query()
+
+        if oQ:Count() > 0
+            oQ:GoTo(1)
+            oRow := JsonParse("{}")
+            aKeys := {"B1_COD", "B1_DESC", "B1_VALID", "B1_UM", "B1_CODBARRA", "B1_LOCPAD"}
+            nCount := len(aKeys)
+            for nI := 1 step 1 while nI <= nCount
+                cVal := oQ:FieldValue(aKeys[nI])
+                JsonSet(oRow, aKeys[nI], cVal)
+            next nI
+            JsonSet(oResult, "produto", oRow)
+        else
+            JsonSet(oResult, "produto", JsonParse("null"))
+        endif
+        oQ:Close()
+        return oResult
+    }
+
+    oField := GqlField():new("findProduto", oProd, bFind, "Busca produto por codigo")
+    oField:addArg("codigo", GqlScalarType():new("String", "C", "Codigo do produto (obrigatorio)"), nil)
+    oQuery:addField(oField)
+
+    // --------------------------------------------------------------
+    // listProdutos(palavra: String, primeiro: Int, offset: Int): [Produto]
+    // --------------------------------------------------------------
+    bList := {|oParent, oArgs, oSch, cFil|;
+        local cPalavra  as character
+        local nPrimeiro as numeric
+        local nOffset   as numeric
+        local cSQL      as character
+        local cWhere    as character
+        local oResult   as json
+        local aProdutos as array
+        local nCount    as numeric
+        local nI        as numeric
+        local oRow      as json
+        local aKeys     as array
+        local nK        as numeric
+        local cVal      as character
+        local cFilUsed  as character
+        local oQ        as object
+
+        cPalavra  := JsonGet(oArgs, "palavra")
+        nPrimeiro := JsonGet(oArgs, "primeiro")
+        nOffset   := JsonGet(oArgs, "offset")
+
+        if nPrimeiro == nil
+            nPrimeiro := 10
+        endif
+        if nOffset == nil
+            nOffset := 0
+        endif
+
+        if cFil != nil .and. cFil != ""
+            cFilUsed := cFil
+        else
+            cFilUsed := cFilial
+        endif
+
+        cWhere := "B1_FILIAL = '" + cFilUsed + "' AND B1_DELET = ' '"
+        if cPalavra != nil .and. cPalavra != ""
+            cWhere := cWhere + " AND B1_DESC LIKE '%" + cPalavra + "%'"
+        endif
+
+        cSQL := "SELECT B1_COD, B1_DESC, B1_VALID, B1_UM, B1_CODBARRA, B1_LOCPAD " +;
+            "FROM " + cTable + " " +;
+            "WHERE " + cWhere + " " +;
+            "ORDER BY B1_DESC " +;
+            "SKIP " + str(nOffset) + " " +;
+            "FIRST " + str(nPrimeiro) + " " +;
+            "%nolock%"
+
+        aProdutos := {}
+        oQ := TCQuery(cSQL):Query()
+        nCount := oQ:Count()
+
+        for nI := 1 step 1 while nI <= nCount
+            oQ:GoTo(nI)
+            oRow := JsonParse("{}")
+            aKeys := {"B1_COD", "B1_DESC", "B1_VALID", "B1_UM", "B1_CODBARRA", "B1_LOCPAD"}
+            for nK := 1 step 1 while nK <= len(aKeys)
+                cVal := oQ:FieldValue(aKeys[nK])
+                JsonSet(oRow, aKeys[nK], cVal)
+            next nK
+            aAdd(aProdutos, oRow)
+        next nI
+        oQ:Close()
+
+        oResult := JsonParse("{}")
+        JsonSet(oResult, "produtos", aProdutos)
+        return oResult
+    }
+
+    oField := GqlField():new("listProdutos", GqlScalarType():new("String", "C", "Lista de produtos"), bList, "Lista produtos com paginacao")
+    oField:addArg("palavra", GqlScalarType():new("String", "C", "Texto para busca na descricao"), nil)
+    oField:addArg("primeiro", GqlScalarType():new("Int", "N", "Quantidade maxima de registros"), nil)
+    oField:addArg("offset", GqlScalarType():new("Int", "N", "Offset para paginacao"), nil)
+    oQuery:addField(oField)
+
+    FWLogMsg("buildProductQueryFields: findProduto and listProdutos added to Query", .T.)
+    return oQuery
+endfunction
+
+endnamespace
