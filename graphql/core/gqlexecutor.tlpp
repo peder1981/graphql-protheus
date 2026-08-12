@@ -1,0 +1,251 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "gqltypes.tlpp"
+#include "gqlschema.tlpp"
+#include "gqlvalidator.tlpp"
+
+namespace custom.graphql
+
+// --------------------------------------------------------------------------
+// GqlExecutor — executes a parsed GraphQL AST against a schema
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@type Object
+/@*/
+class GqlExecutor
+    private data oSchema    as object
+    private data oValidator as object
+    private data aErrors    as array
+    private data oVars      as json
+    private data cFilial    as character
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param oSchema Object - GqlSchema to execute against
+    @return Object - self
+    /@*/
+    method new(oSchema as object) as object class GqlExecutor
+        ::oSchema    := oSchema
+        ::oValidator := GqlValidator():new(oSchema)
+        ::aErrors    := {}
+        ::oVars      := JsonParse("{}")
+        ::cFilial    := ""
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param oVars JSON - variable values
+    @return Object - self for chaining
+    /@*/
+    method setVariables(oVars as json) as object class GqlExecutor
+        ::oVars := oVars
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param cFilial Character - current branch filter
+    @return Object - self for chaining
+    /@*/
+    method setFilial(cFilial as character) as object class GqlExecutor
+        ::cFilial := cFilial
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param oDocument JSON - AST document from parser
+    @return JSON - execution result with "data" and optional "errors"
+    /@*/
+    method execute(oDocument as json) as json class GqlExecutor
+        local aValErrors := ::oValidator:validate(oDocument)
+        local oResult    := nil as object
+
+        if len(aValErrors) > 0
+            oResult := JsonParse("{}")
+            JsonSet(oResult, "errors", ::formatErrors(aValErrors))
+            return oResult
+        endif
+
+        local aDefs  := JsonGet(oDocument, "definitions")
+        local oDef   := aDefs[1]
+        local cOp    := JsonGet(oDef, "operation")
+        local oSS    := JsonGet(oDef, "selectionSet")
+        local oRoot  := ::oSchema:getQueryType()
+        local oData  := ::executeSelectionSet(oSS, oRoot, nil)
+
+        oResult := JsonParse("{}")
+        JsonSet(oResult, "data", oData)
+
+        if len(::aErrors) > 0
+            JsonSet(oResult, "errors", ::formatErrors(::aErrors))
+        endif
+
+        return oResult
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param aSelections Array - selection set array from AST
+    @param oType Object - GqlObjectType to resolve fields against
+    @param oParent JSON - parent data object
+    @return JSON - resolved result object
+    /@*/
+    method executeSelectionSet(aSelections as array, oType as object, oParent as json) as json class GqlExecutor
+        local oResult := JsonParse("{}")
+        local nI      := 0 as numeric
+        local oSel    := nil as object
+        local cName   := "" as character
+        local oField  := nil as object
+        local oVal    := nil as object
+        local oArgs   := nil as object
+        local oSS     := nil as object
+        local bRes    := nil as codeblock
+        local cAlias  := "" as character
+        local cKey    := "" as character
+        local oNestedType := nil as object
+
+        if empty(aSelections)
+            return oResult
+        endif
+
+        for nI := 1 step 1 while nI <= len(aSelections)
+            oSel       := aSelections[nI]
+            cName      := JsonGet(oSel, "name")
+            oField     := ::findField(oType, cName)
+
+            if oField == nil
+                aAdd(::aErrors, GqlError():new("Unknown field: " + cName, "EXECUTION_ERROR"))
+                loop
+            endif
+
+            oArgs   := JsonGet(oSel, "arguments")
+            oSS     := JsonGet(oSel, "selectionSet")
+            bRes    := oField:getResolver()
+            cAlias  := JsonGet(oSel, "alias")
+
+            if cAlias != nil .and. cAlias != ""
+                cKey := cAlias
+            else
+                cKey := cName
+            endif
+
+            if bRes != nil
+                oVal := FWEvalBlock(bRes, {oParent, oArgs, ::oSchema, ::cFilial})
+            else
+                oVal := ::resolveField(oParent, oField)
+            endif
+
+            if oVal != nil .and. oSS != nil
+                oNestedType := oField:getReturnType()
+                if type(oVal) == "C"
+                    oVal := JsonParse(oVal)
+                endif
+                if valtype(oVal) == "U" .or. oVal == nil
+                    oVal := JsonParse("{}")
+                endif
+                oVal := ::executeSelectionSet(oSS, oNestedType, oVal)
+            endif
+
+            JsonSet(oResult, cKey, oVal)
+        next nI
+
+        return oResult
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param oParent JSON - parent data object
+    @param oField Object - GqlField to resolve
+    @return JSON or nil - field value from parent
+    /@*/
+    method resolveField(oParent as json, oField as object) as json class GqlExecutor
+        local cName := oField:getName()
+        local cVal  := JsonGet(oParent, cName)
+
+        if cVal == nil
+            return nil
+        endif
+
+        return cVal
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param oType Object - GqlObjectType to search in
+    @param cName Character - field name to look up
+    @return Object - GqlField if found, nil otherwise
+    /@*/
+    method findField(oType as object, cName as character) as object class GqlExecutor
+        local aFields    := oType:getFields()
+        local nI         := 0 as numeric
+        local oField     := nil as object
+        local aImpls     := oType:getInterfaces()
+        local nJ         := 0 as numeric
+        local oImpl      := nil as object
+        local oImplField := nil as object
+
+        for nI := 1 step 1 while nI <= len(aFields)
+            oField := aFields[nI]
+            if oField:getName() == cName
+                return oField
+            endif
+        next nI
+
+        for nJ := 1 step 1 while nJ <= len(aImpls)
+            oImpl := ::oSchema:getType(aImpls[nJ])
+            if oImpl != nil
+                oImplField := ::findField(oImpl, cName)
+                if oImplField != nil
+                    return oImplField
+                endif
+            endif
+        next nJ
+
+        return nil
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param aErrs Array - array of GqlError objects
+    @return Array - formatted error objects as JSON
+    /@*/
+    method formatErrors(aErrs as array) as array class GqlExecutor
+        local aFormatted := {}
+        local nI         := 0 as numeric
+        local oErr       := nil as object
+        local oFmt       := nil as object
+
+        for nI := 1 step 1 while nI <= len(aErrs)
+            oFmt  := JsonParse("{}")
+            oErr  := aErrs[nI]
+            JsonSet(oFmt, "message", oErr:getMessage())
+            JsonSet(oFmt, "extensions.code", oErr:getCode())
+            aAdd(aFormatted, oFmt)
+        next nI
+
+        return aFormatted
+    endmethod
+
+endclass
+
+endnamespace
