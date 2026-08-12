@@ -1,0 +1,288 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "gqltypes.tlpp"
+#include "gqlschema.tlpp"
+
+namespace custom.graphql
+
+// --------------------------------------------------------------------------
+// GqlAddressInput — optional filter input for city/state
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@type Object
+/@*/
+class GqlAddressInput
+    private data cCidade as character
+    private data cEstado as character
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param cCidade Character
+    @param cEstado Character
+    /@*/
+    method new(cCidade as character, cEstado as character) as object class GqlAddressInput
+        ::cCidade := cCidade
+        ::cEstado := cEstado
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @return Character
+    /@*/
+    method getCidade() as character class GqlAddressInput
+        return ::cCidade
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @return Character
+    /@*/
+    method getEstado() as character class GqlAddressInput
+        return ::cEstado
+    endmethod
+endclass
+
+// --------------------------------------------------------------------------
+// buildClientType — registers the Cliente GraphQL type with all SA1 fields
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@param oSchema Object - GqlSchema to register the type
+@return Object - GqlObjectType Cliente
+/@*/
+function buildClientType(oSchema as object) as object class GqlObjectType
+    local oType  := GqlObjectType():new("Cliente", "SA1", "Dados do cliente (tabela SA1)")
+    local oField
+    local bResolver
+    local cLabel
+
+    // A1_COD
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_COD")
+        return cVal
+    }
+    oField := GqlField():new("codigo", GqlScalarType():new("String", "C", "Codigo do cliente"), bResolver, "Codigo unico do cliente")
+    oType:addField(oField)
+
+    // A1_NOME
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_NOME")
+        return cVal
+    }
+    oField := GqlField():new("nome", GqlScalarType():new("String", "C", "Nome do cliente"), bResolver, "Nome razao social do cliente")
+    oType:addField(oField)
+
+    // A1_END
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_END")
+        return cVal
+    }
+    oField := GqlField():new("endereco", GqlScalarType():new("String", "C", "Endereco"), bResolver, "Endereco do cliente")
+    oType:addField(oField)
+
+    // A1_BAIRRO
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_BAIRRO")
+        return cVal
+    }
+    oField := GqlField():new("bairro", GqlScalarType():new("String", "C", "Bairro"), bResolver, "Bairro do cliente")
+    oType:addField(oField)
+
+    // A1_CIDADE
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_CIDADE")
+        return cVal
+    }
+    oField := GqlField():new("cidade", GqlScalarType():new("String", "C", "Cidade"), bResolver, "Cidade do cliente")
+    oType:addField(oField)
+
+    // A1_ESTADO
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_ESTADO")
+        return cVal
+    }
+    oField := GqlField():new("estado", GqlScalarType():new("String", "C", "Estado"), bResolver, "Sigla do estado do cliente")
+    oType:addField(oField)
+
+    // A1_FONE
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_FONE")
+        return cVal
+    }
+    oField := GqlField():new("telefone", GqlScalarType():new("String", "C", "Telefone"), bResolver, "Telefone do cliente")
+    oType:addField(oField)
+
+    // A1_TIPO
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_TIPO")
+        return cVal
+    }
+    oField := GqlField():new("tipo", GqlScalarType():new("String", "C", "Tipo"), bResolver, "Tipo do cliente (F/J)")
+    oType:addField(oField)
+
+    // A1_INSCRM
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_INSCRM")
+        return cVal
+    }
+    oField := GqlField():new("inscricaoEstadual", GqlScalarType():new("String", "C", "Inscricao Estadual"), bResolver, "Inscricao estadual do cliente")
+    oType:addField(oField)
+
+    // A1_CGC
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cVal := JsonGet(oParent, "A1_CGC")
+        return cVal
+    }
+    oField := GqlField():new("cgc", GqlScalarType():new("String", "C", "CGC/CPF"), bResolver, "CGC ou CPF do cliente")
+    oType:addField(oField)
+
+    oSchema:registerType(oType)
+    return oType
+endfunction
+
+// --------------------------------------------------------------------------
+// buildClientQueryFields — adds findCliente and listClientes to the Query type
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@param oSchema Object - GqlSchema reference
+@return Object - GqlQueryType with SA1 fields added
+/@*/
+function buildClientQueryFields(oSchema as object) as object class GqlObjectType
+    local oQuery      := oSchema:getQueryType()
+    local oClientType := oSchema:getType("Cliente")
+    local cFilial     := xFilial("SA1")
+    local bResolver
+    local cLabel
+
+    // -- findCliente(codigo: String!): Cliente --
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cCodCli   := JsonGet(oArgs, "codigo")
+        local cFilAux   := "" as character
+        local cQuery    := "" as character
+        local oResult   := nil as object
+        local oCliente  := JsonParse("{}") as json
+        local oData     := nil as object
+
+        if empty(cFil)
+            cFilAux := cFilial
+        else
+            cFilAux := cFil
+        endif
+
+        cQuery := "SELECT A1_COD, A1_NOME, A1_END, A1_BAIRRO, A1_CIDADE, A1_ESTADO, A1_FONE, A1_TIPO, A1_INSCRM, A1_CGC " + ;
+                  "FROM " + RetSqlName("SA1") + " " + ;
+                  "WHERE A1_FILIAL = '" + cFilAux + "' " + ;
+                  "AND A1_COD = '" + cCodCli + "' " + ;
+                  "AND A1_DELET = ' ' " + ;
+                  "%nolock%"
+
+        oResult := FWExecStatement(cQuery)
+
+        if oResult:NextRecord()
+            JsonSet(oCliente, "A1_COD",  oResult:GetData("A1_COD"))
+            JsonSet(oCliente, "A1_NOME", oResult:GetData("A1_NOME"))
+            JsonSet(oCliente, "A1_END",  oResult:GetData("A1_END"))
+            JsonSet(oCliente, "A1_BAIRRO", oResult:GetData("A1_BAIRRO"))
+            JsonSet(oCliente, "A1_CIDADE", oResult:GetData("A1_CIDADE"))
+            JsonSet(oCliente, "A1_ESTADO", oResult:GetData("A1_ESTADO"))
+            JsonSet(oCliente, "A1_FONE",  oResult:GetData("A1_FONE"))
+            JsonSet(oCliente, "A1_TIPO",  oResult:GetData("A1_TIPO"))
+            JsonSet(oCliente, "A1_INSCRM", oResult:GetData("A1_INSCRM"))
+            JsonSet(oCliente, "A1_CGC",   oResult:GetData("A1_CGC"))
+        endif
+
+        return oCliente
+    }
+    oQuery:addField(GqlField():new("findCliente", oClientType, bResolver, "Busca cliente por codigo"))
+
+    // -- listClientes(tipo, cidade, estado, primeiro, offset): [Cliente] --
+    bResolver := {|oParent, oArgs, oSchema, cFil|
+        local cTipo      := JsonGet(oArgs, "tipo")
+        local cCidade    := JsonGet(oArgs, "cidade")
+        local cEstado    := JsonGet(oArgs, "estado")
+        local nPrimeiro  := JsonGet(oArgs, "primeiro")
+        local nOffset    := JsonGet(oArgs, "offset")
+        local cFilAux    := "" as character
+        local cWhere     := "1=1" as character
+        local cQuery     := "" as character
+        local oResult    := nil as object
+        local aClientes  := {} as array
+        local oCliente   := nil as object
+        local nCount     := 0 as numeric
+        local nI         := 0 as numeric
+
+        if empty(nPrimeiro) .or. valtype(nPrimeiro) == "U"
+            nPrimeiro := 10
+        endif
+        if empty(nOffset) .or. valtype(nOffset) == "U"
+            nOffset := 0
+        endif
+
+        if empty(cFil)
+            cFilAux := cFilial
+        else
+            cFilAux := cFil
+        endif
+
+        if cTipo   != nil .and. cTipo   != ""
+            cWhere := cWhere + " AND A1_TIPO = '" + cTipo   + "'"
+        endif
+        if cCidade != nil .and. cCidade != ""
+            cWhere := cWhere + " AND A1_CIDADE LIKE '%" + cCidade + "%'"
+        endif
+        if cEstado != nil .and. cEstado != ""
+            cWhere := cWhere + " AND A1_ESTADO = '" + cEstado + "'"
+        endif
+
+        cQuery := "SELECT A1_COD, A1_NOME, A1_END, A1_BAIRRO, A1_CIDADE, A1_ESTADO, A1_FONE, A1_TIPO, A1_INSCRM, A1_CGC " + ;
+                  "FROM " + RetSqlName("SA1") + " " + ;
+                  "WHERE " + cWhere + " " + ;
+                  "AND A1_DELET = ' ' " + ;
+                  "AND A1_FILIAL = '" + cFilAux + "' " + ;
+                  "%nolock%" + ;
+                  "ORDER BY A1_NOME"
+
+        oResult := FWExecStatement(cQuery)
+        nCount  := 0
+
+        do while oResult:NextRecord()
+            nCount++
+            if nCount > nOffset
+                oCliente := JsonParse("{}")
+                JsonSet(oCliente, "A1_COD",    oResult:GetData("A1_COD"))
+                JsonSet(oCliente, "A1_NOME",   oResult:GetData("A1_NOME"))
+                JsonSet(oCliente, "A1_END",    oResult:GetData("A1_END"))
+                JsonSet(oCliente, "A1_BAIRRO", oResult:GetData("A1_BAIRRO"))
+                JsonSet(oCliente, "A1_CIDADE", oResult:GetData("A1_CIDADE"))
+                JsonSet(oCliente, "A1_ESTADO", oResult:GetData("A1_ESTADO"))
+                JsonSet(oCliente, "A1_FONE",   oResult:GetData("A1_FONE"))
+                JsonSet(oCliente, "A1_TIPO",   oResult:GetData("A1_TIPO"))
+                JsonSet(oCliente, "A1_INSCRM", oResult:GetData("A1_INSCRM"))
+                JsonSet(oCliente, "A1_CGC",    oResult:GetData("A1_CGC"))
+                aAdd(aClientes, oCliente)
+            endif
+            if len(aClientes) >= nPrimeiro
+                exit
+            endif
+        enddo
+
+        return aClientes
+    }
+    oQuery:addField(GqlField():new("listClientes", oClientType, bResolver, "Lista clientes com filtros e paginacao"))
+
+    return oQuery
+endfunction
+
+endnamespace
