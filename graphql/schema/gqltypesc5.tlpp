@@ -11,7 +11,7 @@ namespace custom.graphql
 /*/{Protheus.doc}
 @author GraphQL Engine Team
 @since 1.0.0
-@param oSchema Object - instância de GqlSchema
+@param oSchema Object - instçncia de GqlSchema
 @return Object - GqlObjectType NotaFiscal registrado
 @type Function
 /*/
@@ -54,7 +54,7 @@ endfunction
 /*/{Protheus.doc}
 @author GraphQL Engine Team
 @since 1.0.0
-@param oSchema Object - instância de GqlSchema
+@param oSchema Object - instçncia de GqlSchema
 @return Object - GqlQueryType atualizado
 @type Function
 /*/
