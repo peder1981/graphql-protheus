@@ -1,0 +1,93 @@
+"""
+TIR Test — GraphQL Config and Modules Endpoint
+Testa os endpoints de configuracao e discovery do GraphQL Protheus
+"""
+from pytest import mark
+from contrib.tir import Webapp
+import json
+
+
+class TestGraphQLConfig:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_modules_endpoint_returns_json(self):
+        """Endpoint /graphql/modules retorna JSON com metadados dos modulos"""
+        result = self.client.http_get("/graphql/modules")
+        assert result.status_code == 200
+        assert result.headers.get("content-type", "").startswith("application/json")
+        data = json.loads(result.text)
+        assert "modules" in data
+        assert isinstance(data["modules"], list)
+        assert len(data["modules"]) > 0
+
+    def test_modules_have_required_fields(self):
+        """Cada modulo deve ter campos estruturais"""
+        result = self.client.http_get("/graphql/modules")
+        data = json.loads(result.text)
+        for mod in data["modules"]:
+            assert "key" in mod
+            assert "table" in mod
+            assert "type" in mod
+            assert "enabled" in mod
+            assert "fields" in mod
+            assert isinstance(mod["fields"], list)
+            assert len(mod["fields"]) > 0
+
+    def test_modules_reflect_config(self):
+        """Modulos devem refletir a configuracao do appserver.ini"""
+        result = self.client.http_get("/graphql/modules")
+        data = json.loads(result.text)
+        keys = [m["key"] for m in data["modules"]]
+        # Pelo menos customer, product, invoice devem existir
+        assert "customer" in keys
+        assert "product" in keys
+        assert "invoice" in keys
+
+    def test_schema_endpoint_returns_types(self):
+        """Endpoint /graphql/schema retorna metadados do schema"""
+        result = self.client.http_get("/graphql/schema")
+        assert result.status_code == 200
+        data = json.loads(result.text)
+        assert "types" in data
+        assert "config" in data
+
+
+class TestGraphQLPlayground:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_playground_returns_html(self):
+        """Endpoint /graphql/playground retorna HTML"""
+        result = self.client.http_get("/graphql/playground")
+        assert result.status_code == 200
+        assert "text/html" in result.headers.get("content-type", "")
+
+    def test_playground_contains_essential_elements(self):
+        """HTML do playground deve conter elementos essenciais"""
+        result = self.client.http_get("/graphql/playground")
+        html = result.text
+        assert "GraphQL Protheus" in html
+        assert "queryEditor" in html
+        assert "btnExecute" in html
+        assert "resultOutput" in html
+        assert "Exemplos" in html
+        # NAO deve depender de CDN externo
+        assert "cdn.jsdelivr.net" not in html
+        assert "unpkg.com" not in html
+        assert "graphiql" not in html.lower() or "playground" in html.lower()
+
+    def test_playground_contains_module_info(self):
+        """Playground deve mostrar informacoes dos modulos configurados"""
+        result = self.client.http_get("/graphql/playground")
+        html = result.text
+        assert "customer" in html.lower() or "Cliente" in html
+        assert "product" in html.lower() or "Produto" in html
