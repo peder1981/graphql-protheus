@@ -2,9 +2,20 @@
 
 Implementacao de um motor GraphQL completo, embarcado no appserver do Protheus 12.1.2510, desenvolvido inteiramente em TLPP.
 
+> **Self-Service:** Adicione novas tabelas editando o `appserver.ini` — sem recompilar, sem tocar em TLPP.
+> **Playground:** Explore e teste queries em `http://servidor:porta/graphql/playground`
+
 ## Visao Geral
 
 Este projeto implementa o spec GraphQL (parse, validacao, execucao) de forma nativa em TLPP, sem dependencias externas (Node.js, Python, etc.). O motor é exposto via endpoint REST no proprio appserver.
+
+### Principais funcionalidades
+
+- Queries GraphQL completas (`find*` e `list*`) com paginacao e filtros
+- Configuracao via `appserver.ini` — adiciona tabelas sem recompilar
+- Auto-discovery de campos via dicionario SX3 do Protheus
+- Playground interativo auto-contido (sem CDN externo)
+- Documentacao completa e auto-generated
 
 ## Arquitetura
 
@@ -17,9 +28,11 @@ custom.backoffice.graphql.service.entrypoint (Entry Point REST)
      │
      ▼
 GqlExecutive (orquestacao)
-     ├── GqlParser    → AST da query
-     ├── GqlValidator → validacao contra schema
-     └── GqlExecutor  → execucao dos resolvers
+     ├── GqlConfig       ← parse appserver.ini [GraphQL]
+     ├── GqlAutoDiscover ← discovery via SX3/SX1
+     ├── GqlParser       → AST da query
+     ├── GqlValidator    → validacao contra schema
+     └── GqlExecutor     → execucao dos resolvers
               │
               ▼
          FWExecStatement (queries parametrizadas)
@@ -27,6 +40,15 @@ GqlExecutive (orquestacao)
               ▼
          Tabelas Protheus (SA1, SB1, SC5, ...)
 ```
+
+## Endpoints Disponiveis
+
+| Endpoint | Descricao |
+|----------|-----------|
+| `GET /graphql` | Endpoint principal de queries GraphQL |
+| `GET /graphql/playground` | Interface interativa para testar queries |
+| `GET /graphql/schema` | Schema completo em JSON (introspecao) |
+| `GET /graphql/modules` | Lista de modulos configurados e status |
 
 ## Modulos Disponiveis
 
@@ -36,16 +58,57 @@ GqlExecutive (orquestacao)
 | product | SB1 | `Produto` | codigo, descricao, validade, unidademedida, codigobarras, localizacao |
 | invoice | SC5 | `NotaFiscal` | numero, emissao, serie, cliente, serieCF |
 
-## Configuracao
+## Configuracao Rapida (3 passos)
 
-1. Copiar os arquivos `.tlpp` para o projeto Protheus
-2. Adicionar ao `appserver.ini`:
-   ```ini
-   [REST]
-   /graphql=custom.backoffice.graphql.service.entrypoint
-   ```
-3. Compilar todos os arquivos TLPP na ordem correta
-4. Reiniciar o appserver
+### Passo 1 — Adicione no `appserver.ini`
+
+```ini
+[REST]
+/graphql = custom.backoffice.graphql.service.entrypoint
+/graphql/playground = custom.backoffice.graphql.playground.entrypoint
+/graphql/schema = custom.backoffice.graphql.schema.render
+/graphql/modules = custom.backoffice.graphql.modules.render
+
+[GraphQL]
+default.first     = 10
+default.maxFirst  = 100
+module.customer.table      = SA1
+module.customer.type       = Cliente
+module.customer.fields     = A1_COD,A1_NOME,A1_END,A1_BAIRRO,A1_CIDADE,A1_ESTADO,A1_FONE,A1_TIPO,A1_INSCRM,A1_CGC
+module.customer.filter     = A1_NOME,A1_CIDADE,A1_ESTADO,A1_TIPO
+module.customer.enabled    = 1
+module.product.table       = SB1
+module.product.type        = Produto
+module.product.fields      = B1_COD,B1_DESC,B1_VALID,B1_UM,B1_CODBARRA,B1_LOCPAD
+module.product.filter      = B1_DESC
+module.product.enabled     = 1
+module.invoice.table       = SC5
+module.invoice.type        = NotaFiscal
+module.invoice.fields      = C5_NUM,C5_EMISSAO,C5_SERIE,C5_CLIENTE,C5_SERIECF
+module.invoice.filter      = C5_CLIENTE
+module.invoice.enabled     = 1
+module.autoDiscover.enabled      = 0
+```
+
+### Passo 2 — Reinicie o appserver
+
+```bash
+net stop "TOTVS Application Server"
+net start "TOTVS Application Server"
+```
+
+### Passo 3 — Teste
+
+```bash
+# Query direta
+curl "http://servidor:porta/rest/graphql?query=%7B%20findCliente(codigo%3A%20%22000001%22)%20%7B%20codigo%20nome%20%7D%20%7D"
+
+# Playground
+open http://servidor:porta/graphql/playground
+
+# Ver modulos
+curl "http://servidor:porta/graphql/modules"
+```
 
 ## Uso
 
@@ -84,9 +147,13 @@ GqlExecutive (orquestacao)
 ```
 
 ### Introspeccao
-```
-GET /graphql
-→ Retorna o schema completo em JSON
+```graphql
+{
+  __type(name: "Cliente") {
+    name
+    fields { name }
+  }
+}
 ```
 
 ## Registro de Modulos Dinamicos
@@ -117,7 +184,9 @@ custom/backoffice/graphql/
 │   ├── parser.tlpp          # Lexer + Parser GraphQL
 │   ├── validator.tlpp       # Validador de queries
 │   ├── executor.tlpp        # Executor de queries
-│   └── executive.tlpp       # Orquestrador principal (GqlExecutive)
+│   ├── executive.tlpp       # Orquestrador principal (GqlExecutive)
+│   ├── config.tlpp          # Parse de appserver.ini (GqlConfig)
+│   └── autodiscover.tlpp    # Discovery via SX3 (GqlAutoDiscover)
 ├── schema/
 │   ├── customer.types.tlpp  # Type definitions SA1 (Cliente)
 │   ├── product.types.tlpp   # Type definitions SB1 (Produto)
@@ -128,9 +197,21 @@ custom/backoffice/graphql/
 │   ├── invoice.init.tlpp    # Init resolvers SC5
 │   └── generic.tlpp         # Generic resolver (SX3-driven)
 ├── service.entrypoint.tlpp  # Entry point REST /graphql
-└── config/
-    └── appserver-graphql.ini # Configuracao appserver
+├── playground.tlpp          # Interface interativa HTML
+├── playground.entrypoint.tlpp # Entry point REST /graphql/playground
+├── schema.render.tlpp       # Entry point REST /graphql/schema
+└── modules.render.tlpp      # Entry point REST /graphql/modules
 ```
+
+## Documentacao
+
+| Documento | Descricao |
+|-----------|-----------|
+| `docs/api-reference.md` | Referencia completa da API (tipos, operacoes, exemplos) |
+| `docs/configuration.md` | Guia de configuracao INI (todas as chaves, exemplos dev/homolog/prod) |
+| `docs/architecture.md` | Arquitetura do sistema (C4, fluxos, ADRs) |
+| `docs/self-service-guide.md` | Guia do consumidor (primeira query, FAQ, troubleshooting) |
+| `docs/changelog.md` | Historico de versoes |
 
 ## Limitacoes e Consideracoes
 
