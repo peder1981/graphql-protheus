@@ -1,0 +1,47 @@
+"""
+TIR Test — GraphQL SB1 Integration
+Testa os endpoints GraphQL para a tabela SB1 (Produtos)
+"""
+from pytest import mark
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLSB1:
+    def setup_class(self):
+        self.soapClient = Webapp("totvs.rest")
+        self.soapClient.logon()
+
+    def teardown_class(self):
+        self.soapClient.close()
+
+    def test_find_produto_por_codigo(self):
+        """Testa findProduto com codigo existente"""
+        query = json.dumps({
+            "query": "{ findProduto(codigo: \"000001\") { codigo descricao unidademedida } }"
+        })
+        encoded = urllib.parse.quote_plus(query)
+        result = self.soapClient.http_get("/graphql?query=" + encoded)
+        data = json.loads(result.text)
+
+        assert "data" in data
+        assert "findProduto" in data["data"]
+        produto = data["data"]["findProduto"]
+        if produto is not None:
+            assert "codigo" in produto
+
+    def test_list_produtos_com_busca(self):
+        """Testa listProdutos com filtro por palavra"""
+        query = json.dumps({
+            "query": "{ listProdutos(palavra: \"CANETA\", primeiro: 5) { codigo descricao } }"
+        })
+        encoded = urllib.parse.quote_plus(query)
+        result = self.soapClient.http_get("/graphql?query=" + encoded)
+        data = json.loads(result.text)
+
+        assert "data" in data
+        assert "listProdutos" in data["data"]
+        produtos = data["data"]["listProdutos"]
+        assert isinstance(produtos, list)
+        assert len(produtos) <= 5
