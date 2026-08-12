@@ -5,6 +5,8 @@
 #include "parser.tlpp"
 #include "validator.tlpp"
 #include "executor.tlpp"
+#include "config.tlpp"
+#include "autodiscover.tlpp"
 
 namespace custom.backoffice.graphql
 
@@ -22,6 +24,9 @@ class GqlExecutive
     private data oExecutor     as object
     private data aRegistered   as array
     private data cDefaultFilial as character
+    private data oConfig       as object
+    private data oAutoDiscover as object
+    private data aModuleMeta   as array
 
     /*/{Protheus.doc}
     @type Method
@@ -35,6 +40,9 @@ class GqlExecutive
         ::oExecutor      := GqlExecutor():new(::oSchema)
         ::aRegistered    := {}
         ::cDefaultFilial := ""
+        ::oConfig        := GqlConfig():new()
+        ::oAutoDiscover  := GqlAutoDiscover():new(::oConfig)
+        ::aModuleMeta    := {}
         return self
     endmethod
 
@@ -172,6 +180,132 @@ class GqlExecutive
     /@*/
     method getRegisteredModules() as array class GqlExecutive
         return ::aRegistered
+    endmethod
+
+    // -- Internal resolvers --
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @desc Load module configuration from appserver.ini and register with schema
+    @return Object - self
+    /@*/
+    method loadFromConfig() as object class GqlExecutive
+        local aModuleKeys  := {} as array
+        local nI           := 0 as numeric
+        local cModule      := "" as character
+        local cTable       := "" as character
+        local cTypeName    := "" as character
+        local cFieldsStr   := "" as character
+        local aFields      := {} as array
+        local cFiltersStr  := "" as character
+        local aFilters     := {} as array
+        local lEnabled     := .F. as logical
+        local oMeta        := nil as object
+
+        aModuleKeys := ::oConfig:getModuleKeys()
+
+        for nI := 1 to len(aModuleKeys)
+            cModule   := aModuleKeys[nI]
+            cTable    := ::oConfig:getModuleField(cModule, "table")
+            cTypeName := ::oConfig:getModuleField(cModule, "type")
+            cFieldsStr := ::oConfig:getModuleField(cModule, "fields")
+            cFiltersStr := ::oConfig:getModuleField(cModule, "filter")
+            lEnabled  := ::oConfig:isModuleEnabled(cModule)
+
+            if !lEnabled
+                FWLogMsg("GqlExecutive: module '" + cModule + "' is disabled, skipping", .F.)
+                iterate
+            endif
+
+            if cTable == "" .or. cTypeName == ""
+                FWLogMsg("GqlExecutive: module '" + cModule + "' missing table or type, skipping", .F.)
+                iterate
+            endif
+
+            // Parse fields
+            if cFieldsStr != ""
+                aFields := GqlConfig:Explode(cFieldsStr, ",")
+            else
+                // Auto-discover
+                aFields := ::oAutoDiscover:getTableFields(cTable)
+                FWLogMsg("GqlExecutive: auto-discovered " + cValToChar(len(aFields)) + " fields for " + cTable, .T.)
+            endif
+
+            if len(aFields) == 0
+                FWLogMsg("GqlExecutive: no fields for module '" + cModule + "', skipping", .F.)
+                iterate
+            endif
+
+            // Parse filters
+            if cFiltersStr != ""
+                aFilters := GqlConfig:Explode(cFiltersStr, ",")
+            else
+                aFilters := {}
+            endif
+
+            // Register the module
+            ::registerModule(cTable, cTypeName, aFields)
+
+            // Store metadata
+            oMeta := JsonParse("{}")
+            JsonSet(oMeta, "key", cModule)
+            JsonSet(oMeta, "table", cTable)
+            JsonSet(oMeta, "type", cTypeName)
+            JsonSet(oMeta, "enabled", .T.)
+            JsonSet(oMeta, "fields", aFields)
+            JsonSet(oMeta, "filters", aFilters)
+            JsonSet(oMeta, "fieldCount", len(aFields))
+            JsonSet(oMeta, "discovered", empty(cFieldsStr))
+            aAdd(::aModuleMeta, oMeta)
+
+            FWLogMsg("GqlExecutive: loaded module '" + cModule + "' (" + cTable + ") with " + cValToChar(len(aFields)) + " fields", .T.)
+        next nI
+
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @return JSON - module metadata for /graphql/modules endpoint
+    /@*/
+    method getModuleMetadata() as json class GqlExecutive
+        local oResult := JsonParse("{}")
+        local oDisc   := JsonParse("{}")
+        local aDiscResult := nil as json
+
+        JsonSet(oResult, "modules", ::aModuleMeta)
+        JsonSet(oResult, "config", JsonParse("{") + ;
+               "\"defaultFirst\":" + cValToChar(::oConfig:getDefaultFirst()) + "," + ;
+               "\"maxFirst\":" + cValToChar(::oConfig:getMaxFirst()) + "," + ;
+               "\"logEnabled\":" + (::oConfig:isLogEnabled() ? "true" : "false") + "," + ;
+               "\"autoDiscoverEnabled\":" + (::oConfig:getAutoDiscoverEnabled() ? "true" : "false") + ;
+               "}")
+
+        if ::oConfig:getAutoDiscoverEnabled()
+            aDiscResult := ::oAutoDiscover:discover()
+            JsonSet(oDisc, "tablesDiscovered", len(aDiscResult))
+            JsonSet(oDisc, "tablesSkipped", len(::oConfig:getAutoDiscoverSkipTables()))
+        else
+            JsonSet(oDisc, "tablesDiscovered", 0)
+            JsonSet(oDisc, "tablesSkipped", 0)
+        endif
+        JsonSet(oResult, "autoDiscover", oDisc)
+
+        return oResult
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @return Object - GqlAutoDiscover instance
+    /@*/
+    method getAutoDiscover() as object class GqlExecutive
+        return ::oAutoDiscover
     endmethod
 
     // -- Internal resolvers --
@@ -325,7 +459,7 @@ class GqlExecutive
     @type Method
     @author GraphQL Engine Team
     @since 1.0.0
-    @desc Internal camelCase converter — removes underscores, lowercases first char, capitalizes chars after underscores
+    @desc Internal camelCase converter ï¿½ removes underscores, lowercases first char, capitalizes chars after underscores
     /@*/
     static method toCamelCaseInternal(cField as character) as character class GqlExecutive
         local cResult   := "" as character
