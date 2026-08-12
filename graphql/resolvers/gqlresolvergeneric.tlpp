@@ -1,0 +1,228 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "gqltypes.tlpp"
+#include "gqlschema.tlpp"
+
+namespace custom.graphql
+
+// --------------------------------------------------------------------------
+// GqlGenericResolver — dynamically creates list/find resolvers from a
+// Protheus table alias and a field list. Uses SX3 dictionary metadata.
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@type Object
+/@*/
+class GqlGenericResolver
+    private data cTable    as character
+    private data cTypeName as character
+    private data oSchema   as object
+    private data aFields   as array
+    private data cPrimaryKey as character
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param cTable Character - Protheus table alias (SA1, SB1, etc.)
+    @param cTypeName Character - GraphQL type name (Cliente, Produto, etc.)
+    @param oSchema Object - GqlSchema reference
+    @return Object - self
+    /@*/
+    method new(cTable as character, cTypeName as character, oSchema as object) as object class GqlGenericResolver
+        ::cTable      := cTable
+        ::cTypeName   := cTypeName
+        ::oSchema     := oSchema
+        ::aFields     := {}
+        ::cPrimaryKey := ""
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param cField Character - Primary key field name (e.g. A1_COD)
+    @return Object - self for chaining
+    /@*/
+    method setPrimaryKey(cField as character) as object class GqlGenericResolver
+        ::cPrimaryKey := cField
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param cField Character - Field name to expose (e.g. A1_NOME)
+    @return Object - self for chaining
+    /@*/
+    method addField(cField as character) as object class GqlGenericResolver
+        aAdd(::aFields, cField)
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param cPkField Character - Primary key field name for the resolver
+    @return CodeBlock - resolver function
+    /@*/
+    method buildFindByIdField(cPkField as character) as codeblock class GqlGenericResolver
+        local cTable    := ::cTable
+        local cPk       := cPkField
+        local aFlds     := ::aFields
+        local cFilTable := xFilial(cTable)
+
+        return {|oParent, oArgs, oSch, cFil|
+            local cPkVal   := JsonGet(oArgs, "codigo")
+            local cFilAux  := "" as character
+            local cCols    := "" as character
+            local cQuery   := "" as character
+            local oResult  := nil as object
+            local oRec     := nil as object
+            local nI       := 0 as numeric
+
+            // Filial fallback: use parameter or table default
+            if empty(cFil)
+                cFilAux := cFilTable
+            else
+                cFilAux := cFil
+            endif
+
+            cCols    := GqlGenericResolver:buildSelectColumns(aFlds)
+            cQuery   := "SELECT " + cCols + " FROM " + RetSqlName(cTable) + " " + ;
+                        "WHERE " + cTable + "_FILIAL = '" + cFilAux + "' " + ;
+                        "AND " + cPk + " = '" + cPkVal + "' " + ;
+                        "AND " + cTable + ".D_E_L_E_T_ = ' ' " + ;
+                        "%nolock%"
+
+            FWLogMsg("GqlGenericResolver: findById query => " + cQuery, .T.)
+            oResult := FWExecStatement(cQuery)
+            oRec    := JsonParse("{}")
+
+            if oResult:NextRecord()
+                for nI := 1 step 1 while nI <= len(aFlds)
+                    JsonSet(oRec, aFlds[nI], oResult:GetData(aFlds[nI]))
+                next nI
+            endif
+
+            return oRec
+        }
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param aFilterFields Array - field names to use as filter keys in args
+    @return CodeBlock - resolver function returning array of JSON objects
+    /@*/
+    method buildListField(aFilterFields as array) as codeblock class GqlGenericResolver
+        local cTable     := ::cTable
+        local cFilTable  := xFilial(cTable)
+        local aFlds      := ::aFields
+        local aFilters   := aFilterFields
+        local cFilAux    := "" as character
+        local nPrimeiro  := 0 as numeric
+        local nOffset    := 0 as numeric
+        local cCols      := "" as character
+        local cWhere     := "" as character
+        local cQuery     := "" as character
+        local oResult    := nil as object
+        local aRecords   := {} as array
+        local oRec       := nil as object
+        local nCount     := 0 as numeric
+        local nI         := 0 as numeric
+        local cField     := "" as character
+        local cVal       := nil as object
+
+        return {|oParent, oArgs, oSch, cFil|
+            cFilAux   := "" as character
+            nPrimeiro := 10
+            nOffset   := 0
+
+            // Filial fallback
+            if empty(cFil)
+                cFilAux := cFilTable
+            else
+                cFilAux := cFil
+            endif
+
+            // Pagination args
+            nPrimeiro := JsonGet(oArgs, "primeiro")
+            if nPrimeiro == nil
+                nPrimeiro := 10
+            endif
+            nOffset := JsonGet(oArgs, "offset")
+            if nOffset == nil
+                nOffset := 0
+            endif
+
+            // Dynamic WHERE from filter fields
+            cWhere := "1=1"
+            for nI := 1 step 1 while nI <= len(aFilters)
+                cField := aFilters[nI]
+                cVal   := JsonGet(oArgs, cField)
+                if cVal != nil .and. cVal != ""
+                    cWhere := cWhere + " AND " + cTable + "." + cField + " LIKE '%" + cVal + "%'"
+                endif
+            next nI
+
+            cCols     := GqlGenericResolver:buildSelectColumns(aFlds)
+            cQuery    := "SELECT " + cCols + " FROM " + RetSqlName(cTable) + " " + ;
+                         "WHERE " + cWhere + " " + ;
+                         "AND " + cTable + ".D_E_L_E_T_ = ' ' " + ;
+                         "AND " + cTable + "_FILIAL = '" + cFilAux + "' " + ;
+                         "%nolock%" + ;
+                         "ORDER BY " + aFlds[1]
+
+            FWLogMsg("GqlGenericResolver: list query => " + cQuery, .T.)
+            oResult := FWExecStatement(cQuery)
+            nCount  := 0
+
+            do while oResult:NextRecord()
+                nCount++
+                if nCount > nOffset
+                    oRec    := JsonParse("{}")
+                    for nI := 1 step 1 while nI <= len(aFlds)
+                        JsonSet(oRec, aFlds[nI], oResult:GetData(aFlds[nI]))
+                    next nI
+                    aAdd(aRecords, oRec)
+                endif
+                if len(aRecords) >= nPrimeiro
+                    exit
+                endif
+            enddo
+
+            return aRecords
+        }
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param aFields Array - field name array
+    @return Character - comma-joined column list
+    /@*/
+    static method buildSelectColumns(aFields as array) as character class GqlGenericResolver
+        local cCols    := "" as character
+        local nI       := 0 as numeric
+        local nCount   := len(aFields)
+
+        for nI := 1 step 1 while nI <= nCount
+            if nI > 1
+                cCols := cCols + ", "
+            endif
+            cCols := cCols + aFields[nI]
+        next nI
+
+        return cCols
+    endmethod
+
+endclass
+
+endnamespace
