@@ -325,7 +325,7 @@ class GqlExecutive
     @type Method
     @author GraphQL Engine Team
     @since 1.0.0
-    @desc Internal camelCase converter â€” removes underscores, lowercases first char, capitalizes chars after underscores
+    @desc Internal camelCase converter — removes underscores, lowercases first char, capitalizes chars after underscores
     /@*/
     static method toCamelCaseInternal(cField as character) as character class GqlExecutive
         local cResult   := "" as character
