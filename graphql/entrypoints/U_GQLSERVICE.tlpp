@@ -1,0 +1,59 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "gqltypes.tlpp"
+#include "gqlschema.tlpp"
+#include "gqlparser.tlpp"
+#include "gqlvalidator.tlpp"
+#include "gqlexecutor.tlpp"
+#include "gqlexecutive.tlpp"
+
+/*/{Protheus.doc}
+User Function GQLSERVICE
+@type: Entry Point
+@ep: U_GQLSERVICE
+@param: None (reads query/filial from HTTP params)
+@return: HTTP response with JSON body
+@doc: GraphQL endpoint for Protheus ERP. Accepts GET /graphql?query=...&filial=...
+      Returns GraphQL execution result as JSON.
+      /{Protheus.doc}
+
+User Function GQLSERVICE()
+    local oExecutive := custom.graphql.GqlExecutive():new()
+    local cQuery     := "" as character
+    local cFilial    := "" as character
+    local oResult    := nil as object
+    local cJsonOut   := "" as character
+
+    // Read query parameter
+    cQuery := GetParam("query", "")
+
+    // Read optional filial parameter
+    cFilial := GetParam("filial", "")
+
+    // Fallback to MV parameter if no filial in request
+    if empty(cFilial)
+        cFilial := GetMV("MV_GQLFIL", "", 0)
+    endif
+
+    oExecutive:setDefaultFilial(cFilial)
+
+    // Register default modules
+    oExecutive:registerModule("SA1", "Cliente", {"A1_COD", "A1_NOME", "A1_END", "A1_BAIRRO", "A1_CIDADE", "A1_ESTADO", "A1_FONE", "A1_TIPO", "A1_INSCRM", "A1_CGC"})
+    oExecutive:registerModule("SB1", "Produto", {"B1_COD", "B1_DESC", "B1_VALID", "B1_UM", "B1_CODBARRA", "B1_LOCPAD"})
+    oExecutive:registerModule("SC5", "NotaFiscal", {"C5_NUM", "C5_EMISSAO", "C5_SERIE", "C5_CLIENTE", "C5_SERIECF"})
+
+    // Execute or introspect
+    if empty(cQuery)
+        oResult := oExecutive:introspect()
+    else
+        oResult := oExecutive:executeQuery(cQuery, cFilial)
+    endif
+
+    // Build JSON response
+    cJsonOut := JsonStringify(oResult)
+
+    // Set response headers and body
+    FWSetHeader("application/json", .T.)
+    FWPrintHTML(cJsonOut)
+
+Return
