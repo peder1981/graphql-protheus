@@ -1,0 +1,237 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "gqltypes.tlpp"
+#include "gqlschema.tlpp"
+
+namespace custom.graphql
+
+// --------------------------------------------------------------------------
+// buildInvoiceType - registers the NotaFiscal GraphQL type with SC5 fields
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@param oSchema Object - instância de GqlSchema
+@return Object - GqlObjectType NotaFiscal registrado
+@type Function
+/*/
+static function buildInvoiceType(oSchema as object) as object
+    local oType   as object
+    local oField  as object
+    local cFilial as character
+
+    oType := GqlObjectType():new("NotaFiscal", "SC5", "Dados da nota fiscal (tabela SC5)")
+    cFilial := xFilial("SC5")
+
+    // numero -> C5_NUM
+    oField := GqlField():new("numero", GqlScalarType():new("String", "C", "Numero da nota fiscal"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "C5_NUM") })
+    oType:addField(oField)
+
+    // emissao -> C5_EMISSAO (data)
+    oField := GqlField():new("emissao", GqlScalarType():new("String", "D", "Data de emissao da nota fiscal"), {|oParent, oArgs, oSch, cFil| local cVal := JsonGet(oParent, "C5_EMISSAO"); if valtype(cVal) == "D"; return dValToChar(cVal, "YMD"); else; return ""; endIf })
+    oType:addField(oField)
+
+    // serie -> C5_SERIE
+    oField := GqlField():new("serie", GqlScalarType():new("String", "C", "Serie da nota fiscal"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "C5_SERIE") })
+    oType:addField(oField)
+
+    // cliente -> C5_CLIENTE
+    oField := GqlField():new("cliente", GqlScalarType():new("String", "C", "Codigo do cliente"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "C5_CLIENTE") })
+    oType:addField(oField)
+
+    // serieCF -> C5_SERIECF
+    oField := GqlField():new("serieCF", GqlScalarType():new("String", "C", "Serie da nota fiscal (CF)"), {|oParent, oArgs, oSch, cFil| JsonGet(oParent, "C5_SERIECF") })
+    oType:addField(oField)
+
+    oSchema:registerType(oType)
+    FWLogMsg("buildInvoiceType: NotaFiscal type registered", .T.)
+    return oType
+endfunction
+
+// --------------------------------------------------------------------------
+// buildInvoiceQueryFields - adds findNotaFiscal and listNotasFiscais to Query
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@author GraphQL Engine Team
+@since 1.0.0
+@param oSchema Object - instância de GqlSchema
+@return Object - GqlQueryType atualizado
+@type Function
+/*/
+static function buildInvoiceQueryFields(oSchema as object) as object
+    local oQuery  as object
+    local oNota   as object
+    local oField  as object
+    local cFilial as character
+    local cTable  as character
+    local bFind   as codeblock
+    local bList   as codeblock
+
+    oQuery := oSchema:getQueryType()
+    oNota  := oSchema:getType("NotaFiscal")
+
+    if oNota == nil
+        FWLogMsg("buildInvoiceQueryFields: NotaFiscal type not found in schema", .F.)
+        return oQuery
+    endif
+
+    cFilial := xFilial("SC5")
+    cTable  := RetSqlName("SC5")
+
+    // --------------------------------------------------------------
+    // findNotaFiscal(numero: String!, serie: String!): NotaFiscal
+    // --------------------------------------------------------------
+    bFind := {|oParent, oArgs, oSch, cFil|;
+        local cNumero  as character
+        local cSerie   as character
+        local cSQL     as character
+        local cFilUsed as character
+        local oResult  as json
+        local oRow     as json
+        local aKeys    as array
+        local nCount   as numeric
+        local nI       as numeric
+        local cVal     as character
+        local oQ       as object
+
+        cNumero := JsonGet(oArgs, "numero")
+        cSerie  := JsonGet(oArgs, "serie")
+
+        if cNumero == nil .or. cNumero == "" .or. cSerie == nil .or. cSerie == ""
+            oResult := JsonParse("{}")
+            return oResult
+        endif
+
+        if cFil != nil .and. cFil != ""
+            cFilUsed := cFil
+        else
+            cFilUsed := cFilial
+        endif
+
+        cSQL := "SELECT C5_NUM, C5_EMISSAO, C5_SERIE, C5_CLIENTE, C5_SERIECF " + ;
+            "FROM " + cTable + " " + ;
+            "WHERE C5_FILIAL = '" + cFilUsed + "' " + ;
+            "AND C5_NUM = '" + cNumero + "' " + ;
+            "AND C5_SERIE = '" + cSerie + "' " + ;
+            "AND C5_DELET = ' ' " + ;
+            "%nolock%"
+
+        oResult := JsonParse("{}")
+        oQ := TCQuery(cSQL):Query()
+
+        if oQ:Count() > 0
+            oQ:GoTo(1)
+            oRow := JsonParse("{}")
+            aKeys := {"C5_NUM", "C5_EMISSAO", "C5_SERIE", "C5_CLIENTE", "C5_SERIECF"}
+            nCount := len(aKeys)
+            for nI := 1 step 1 while nI <= nCount
+                cVal := oQ:FieldValue(aKeys[nI])
+                JsonSet(oRow, aKeys[nI], cVal)
+            next nI
+            JsonSet(oResult, "notaFiscal", oRow)
+        else
+            JsonSet(oResult, "notaFiscal", JsonParse("null"))
+        endif
+        oQ:Close()
+        return oResult
+    }
+
+    oField := GqlField():new("findNotaFiscal", oNota, bFind, "Busca nota fiscal por numero e serie")
+    oField:addArg("numero", GqlScalarType():new("String", "C", "Numero da nota fiscal (obrigatorio)"), nil)
+    oField:addArg("serie", GqlScalarType():new("String", "C", "Serie da nota fiscal (obrigatorio)"), nil)
+    oQuery:addField(oField)
+
+    // --------------------------------------------------------------
+    // listNotasFiscais(cliente, dataIni, dataFim, primeiro, offset): [NotaFiscal]
+    // --------------------------------------------------------------
+    bList := {|oParent, oArgs, oSch, cFil|;
+        local cCliente  as character
+        local cDataIni  as character
+        local cDataFim  as character
+        local nPrimeiro as numeric
+        local nOffset   as numeric
+        local cSQL      as character
+        local cWhere    as character
+        local oResult   as json
+        local aNotas    as array
+        local nCount    as numeric
+        local nI        as numeric
+        local oRow      as json
+        local aKeys     as array
+        local nK        as numeric
+        local cVal      as character
+        local cFilUsed  as character
+        local oQ        as object
+
+        cCliente  := JsonGet(oArgs, "cliente")
+        cDataIni  := JsonGet(oArgs, "dataIni")
+        cDataFim  := JsonGet(oArgs, "dataFim")
+        nPrimeiro := JsonGet(oArgs, "primeiro")
+        nOffset   := JsonGet(oArgs, "offset")
+
+        if nPrimeiro == nil
+            nPrimeiro := 10
+        endif
+        if nOffset == nil
+            nOffset := 0
+        endif
+
+        if cFil != nil .and. cFil != ""
+            cFilUsed := cFil
+        else
+            cFilUsed := cFilial
+        endif
+
+        cWhere := "C5_FILIAL = '" + cFilUsed + "' AND C5_DELET = ' '"
+        if cCliente != nil .and. cCliente != ""
+            cWhere := cWhere + " AND C5_CLIENTE = '" + cCliente + "'"
+        endif
+        if cDataIni != nil .and. cDataIni != ""
+            cWhere := cWhere + " AND C5_EMISSAO >= '" + cDataIni + "'"
+        endif
+        if cDataFim != nil .and. cDataFim != ""
+            cWhere := cWhere + " AND C5_EMISSAO <= '" + cDataFim + "'"
+        endif
+
+        cSQL := "SELECT C5_NUM, C5_EMISSAO, C5_SERIE, C5_CLIENTE, C5_SERIECF " + ;
+            "FROM " + cTable + " " + ;
+            "WHERE " + cWhere + " " + ;
+            "ORDER BY C5_EMISSAO DESC " + ;
+            "SKIP " + str(nOffset) + " " + ;
+            "FIRST " + str(nPrimeiro) + " " + ;
+            "%nolock%"
+
+        aNotas := {}
+        oQ := TCQuery(cSQL):Query()
+        nCount := oQ:Count()
+
+        for nI := 1 step 1 while nI <= nCount
+            oQ:GoTo(nI)
+            oRow := JsonParse("{}")
+            aKeys := {"C5_NUM", "C5_EMISSAO", "C5_SERIE", "C5_CLIENTE", "C5_SERIECF"}
+            for nK := 1 step 1 while nK <= len(aKeys)
+                cVal := oQ:FieldValue(aKeys[nK])
+                JsonSet(oRow, aKeys[nK], cVal)
+            next nK
+            aAdd(aNotas, oRow)
+        next nI
+        oQ:Close()
+
+        oResult := JsonParse("{}")
+        JsonSet(oResult, "notasFiscais", aNotas)
+        return oResult
+    }
+
+    oField := GqlField():new("listNotasFiscais", GqlScalarType():new("String", "C", "Lista de notas fiscais"), bList, "Lista notas fiscais com filtros e paginacao")
+    oField:addArg("cliente", GqlScalarType():new("String", "C", "Codigo do cliente para filtro"), nil)
+    oField:addArg("dataIni", GqlScalarType():new("String", "D", "Data inicial para filtro (YYYY-MM-DD)"), nil)
+    oField:addArg("dataFim", GqlScalarType():new("String", "D", "Data final para filtro (YYYY-MM-DD)"), nil)
+    oField:addArg("primeiro", GqlScalarType():new("Int", "N", "Quantidade maxima de registros"), nil)
+    oField:addArg("offset", GqlScalarType():new("Int", "N", "Offset para paginacao"), nil)
+    oQuery:addField(oField)
+
+    FWLogMsg("buildInvoiceQueryFields: findNotaFiscal and listNotasFiscais added to Query", .T.)
+    return oQuery
+endfunction
+
+endnamespace
