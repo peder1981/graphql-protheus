@@ -1,0 +1,49 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "types.tlpp"
+#include "schema.tlpp"
+#include "config.tlpp"
+#include "executor.tlpp"
+#include "executive.tlpp"
+
+/*/{Protheus.doc}
+User Function GQLSCHEMARENDER
+@type: Entry Point
+@ep: U_GQLSCHEMARENDER
+@param: None
+@return: HTTP response with JSON body
+@doc: GraphQL Schema endpoint -- returns expanded schema metadata including
+      all types, fields, and module configuration. Useful for API clients
+      that need to discover the schema programmatically.
+/{Protheus.doc}
+
+User Function GQLSCHEMARENDER()
+    local oExecutive := custom.backoffice.graphql.GqlExecutive():new()
+    local oConfig    := custom.backoffice.graphql.GqlConfig():new()
+    local cFilial    := "" as character
+    local oResult    := nil as json
+    local cJsonOut   := "" as character
+    local oIntrospect := nil as json
+
+    cFilial := GetParam("filial", "")
+    if empty(cFilial)
+        cFilial := GetMV("MV_GQLFIL", "")
+    endif
+    oExecutive:setDefaultFilial(cFilial)
+    oExecutive:loadFromConfig()
+
+    // Build expanded schema from introspection
+    oResult := JsonParse("{}")
+    oIntrospect := oExecutive:introspect()
+    JsonSet(oResult, "types", oIntrospect)
+    JsonSet(oResult, "queryType", "Query")
+    JsonSet(oResult, "mutationType", nil)
+    JsonSet(oResult, "config", JsonParse("{}"))
+    JsonSet(oResult:getJson("config"), "defaultFirst", oConfig:getDefaultFirst())
+    JsonSet(oResult:getJson("config"), "maxFirst", oConfig:getMaxFirst())
+
+    cJsonOut := JsonStringify(oResult)
+    FWSetHeader("application/json", .T.)
+    FWPrintHTML(cJsonOut)
+
+Return

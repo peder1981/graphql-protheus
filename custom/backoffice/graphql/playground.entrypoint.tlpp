@@ -1,0 +1,52 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "types.tlpp"
+#include "schema.tlpp"
+#include "config.tlpp"
+#include "autodiscover.tlpp"
+#include "executor.tlpp"
+#include "executive.tlpp"
+#include "playground.tlpp"
+
+/*/{Protheus.doc}
+User Function GQLPLAYGROUND
+@type: Entry Point
+@ep: U_GQLPLAYGROUND
+@param: None
+@return: HTTP response with HTML body
+@doc: GraphQL Playground -- interactive self-service interface for exploring the GraphQL API
+      Serves a self-contained HTML page with query editor, type explorer, and examples.
+      No external CDN dependencies.
+/{Protheus.doc}
+
+User Function GQLPLAYGROUND()
+    local oExecutive    := custom.backoffice.graphql.GqlExecutive():new()
+    local oConfig       := custom.backoffice.graphql.GqlConfig():new()
+    local oPlayground   := nil as object
+    local cHtml         := "" as character
+    local cFilial       := "" as character
+    local cBaseUrl      := "" as character
+
+    // Read optional filial from query param
+    cFilial := GetParam("filial", "")
+    if empty(cFilial)
+        cFilial := GetMV("MV_GQLFIL", "")
+    endif
+
+    oExecutive:setDefaultFilial(cFilial)
+
+    // Load modules from config (INI)
+    oExecutive:loadFromConfig()
+
+    // Determine base URL for fetch calls
+    cBaseUrl := "/rest"
+
+    // Build and render playground
+    oPlayground := custom.backoffice.graphql.GqlPlayground():new(oExecutive:oSchema, oConfig, cBaseUrl)
+    cHtml := oPlayground:render()
+
+    // Serve HTML
+    FWSetHeader("text/html; charset=UTF-8", .T.)
+    FWPrintHTML(cHtml)
+
+Return
