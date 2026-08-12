@@ -166,17 +166,6 @@ class GqlAutoDiscover
 
         cSql := "SELECT ADQ_CAMPO FROM " + RetSqlName("SX3") + " " + ;
                 "WHERE SX3_FILIAL = '" + cFilial + "' " + ;
-                "AND SX3_CPOSX3 = (SELECT MAX(SX3_CPOSX3) FROM " + RetSqlName("SX3") + " S2 " + ;
-                "WHERE S2.SX3_TABELA = '" + cTable + "' AND S2.SX3_CPOSX3 = SX3.SX3_CPOSX3) " + ;
-                "AND ADQ_CAMPO != '' " + ;
-                "AND ADQ_CAMPO NOT LIKE 'D_E_L_E_T_%' " + ;
-                "AND ADQ_CAMPO NOT LIKE 'XI%' " + ;
-                "%nolock%" + ;
-                "ORDER BY ADQ_CAMPO"
-
-        // Simpler approach: use SX3 with table filter
-        cSql := "SELECT ADQ_CAMPO FROM " + RetSqlName("SX3") + " " + ;
-                "WHERE SX3_FILIAL = '" + cFilial + "' " + ;
                 "AND SX3_TABELA = '" + cTable + "' " + ;
                 "AND ADQ_CAMPO != '' " + ;
                 "AND ADQ_CAMPO NOT LIKE 'D_E_L_E_T_%' " + ;
@@ -197,7 +186,5 @@ class GqlAutoDiscover
 
         return aFields
     endmethod
-
-endnamespace
 
 endnamespace
