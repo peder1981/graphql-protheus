@@ -1,0 +1,167 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "gqltypes.tlpp"
+
+namespace custom.graphql
+
+// --------------------------------------------------------------------------
+// GqlSchema - central registry for all GraphQL types
+// --------------------------------------------------------------------------
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 1.0.0
+/@*/
+class GqlSchema
+    private data aTypes      as array
+    private data oQuery      as object
+    private data aMutations  as array
+    private data cDescription as character
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param cDescription Character - Schema description
+    @return Object - self
+    /@*/
+    method new(cDescription as character) as object class GqlSchema
+        ::aTypes      := {}
+        ::oQuery      := GqlQueryType():new()
+        ::aMutations  := {}
+        ::cDescription := cDescription
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param oType Object - Type object to register
+    @return Object - self
+    /@*/
+    method registerType(oType as object) as object class GqlSchema
+        local nIdx := aScan(::aTypes, {|aItem| aItem[1] == oType:getName() })
+        if nIdx == 0
+            aAdd(::aTypes, {oType:getName(), oType})
+            FWLogMsg("GqlSchema: registered type '" + oType:getName() + "'", .T.)
+        else
+            FWLogMsg("GqlSchema: type '" + oType:getName() + "' already registered, skipping", .F.)
+        endIf
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param cName Character - Type name to look up
+    @return Object - Type object, or nil if not found
+    /@*/
+    method getType(cName as character) as object class GqlSchema
+        local nIdx := aScan(::aTypes, {|aItem| aItem[1] == cName })
+        if nIdx > 0
+            return ::aTypes[nIdx][2]
+        endIf
+        return nil
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @return Object - Root query type (GqlQueryType)
+    /@*/
+    method getQueryType() as object class GqlSchema
+        return ::oQuery
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @param oType Object - Mutation type object to register
+    @return Object - self
+    /@*/
+    method registerMutation(oType as object) as object class GqlSchema
+        aAdd(::aMutations, oType)
+        FWLogMsg("GqlSchema: registered mutation '" + oType:getName() + "'", .T.)
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @return Array - Mutations array
+    /@*/
+    method getMutations() as array class GqlSchema
+        return ::aMutations
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @return JSON - Introspection JSON object
+    /@*/
+    method buildIntrospection() as json class GqlSchema
+        local aTypeNames := {} as array
+        local nCount := len(::aTypes)
+        local nI     := 0 as numeric
+        local cTypeName := "" as character
+        local oJson := JsonParse("{}") as json
+        local oSchema := JsonParse("{}") as json
+        local oQueryType := JsonParse("{}") as json
+        local aAllTypes := {} as array
+
+        // Query type
+        aAdd(aAllTypes, ::oQuery:getName())
+        JsonSet(oQueryType, "name", ::oQuery:getName())
+        JsonSet(oSchema, "queryType", oQueryType)
+
+        // Mutation types
+        if len(::aMutations) > 0
+            local aMutationNames := {} as array
+            local nMutCount := len(::aMutations)
+            local nMutI := 0 as numeric
+            local oMut := nil as object
+            for nMutI := 1 step 1 while nMutI <= nMutCount
+                oMut := ::aMutations[nMutI]
+                aAdd(aMutationNames, oMut:getName())
+                aAdd(aAllTypes, oMut:getName())
+            next nMutI
+            JsonSet(oSchema, "mutationType", aMutationNames)
+        endIf
+
+        // Registered types
+        for nI := 1 step 1 while nI <= nCount
+            cTypeName := ::aTypes[nI][1]
+            aAdd(aTypeNames, cTypeName)
+            aAdd(aAllTypes, cTypeName)
+        next nI
+
+        JsonSet(oSchema, "types", aTypeNames)
+        JsonSet(oJson, "data.__schema", oSchema)
+
+        return oJson
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 1.0.0
+    @return Array - Array of type name strings
+    /@*/
+    method getTypeNames() as array class GqlSchema
+        local aNames := {} as array
+        local nCount := len(::aTypes)
+        local nI     := 0 as numeric
+        for nI := 1 step 1 while nI <= nCount
+            aAdd(aNames, ::aTypes[nI][1])
+        next nI
+        return aNames
+    endmethod
+endclass
+
+endnamespace
