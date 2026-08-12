@@ -1,0 +1,203 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "types.tlpp"
+#include "schema.tlpp"
+#include "config.tlpp"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 2.0.0
+@desc GqlAutoDiscover - query SX3 dictionary to auto-discover table fields
+/@*/
+class GqlAutoDiscover
+    private data oConfig    as object
+    private data oCache     as json
+    private data lCached    as logical
+    private data cFilial    as character
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @param oConfig Object - GqlConfig instance
+    @return Object - self
+    /@*/
+    method new(oConfig as object) as object class GqlAutoDiscover
+        ::oConfig  := oConfig
+        ::oCache   := JsonParse("{}")
+        ::lCached  := .F.
+        ::cFilial  := xFilial("SA1")  // default filial for dictionary queries
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @param cFilial Character - branch to use for dictionary queries
+    @return Object - self
+    /@*/
+    method setFilial(cFilial as character) as object class GqlAutoDiscover
+        if cFilial != "" .and. cFilial != nil
+            ::cFilial := cFilial
+        endif
+        return self
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @return JSON - discovery result {"TABLE": {"fields": [...], "count": N}}
+    /@*/
+    method discover() as json class GqlAutoDiscover
+        local cSql    := "" as character
+        local oRs     := nil as object
+        local cTable  := "" as character
+        local cField  := "" as character
+        local aFields := {} as array
+        local aAllTables := {} as json
+        local oResult  := JsonParse("{}")
+        local nI       := 0 as numeric
+        local cTableName := "" as character
+        local aTableList := {} as array
+
+        // Build list of tables to discover from SX1 (table dictionary)
+        cSql := "SELECT SX1_TABELA FROM " + RetSqlName("SX1") + " " + ;
+                "WHERE SX1_FILIAL = '" + ::cFilial + "' " + ;
+                "AND SX1_DELET = ' ' " + ;
+                "AND SX1_TIPO in ('T','V') " + ;
+                "%nolock%" + ;
+                "ORDER BY SX1_TABELA"
+
+        oRs := FWExecStatement(cSql)
+        if oRs != nil
+            do while oRs:NextRecord()
+                cTableName := alltrim(oRs:GetData("SX1_TABELA"))
+                if cTableName != "" .and. !::isSkipTable(cTableName)
+                    aAdd(aTableList, cTableName)
+                endif
+            enddo
+            oRs:Close()
+        endif
+
+        // For each table, query SX3 for fields
+        for nI := 1 to len(aTableList)
+            cTableName := aTableList[nI]
+            aFields := ::getTableFieldsDirect(cTableName)
+            if len(aFields) >= ::oConfig:getAutoDiscoverMinFields()
+                JsonSet(oResult, cTableName, JsonParse("{\"fields\":" + JsonStringify(aFields) + ",\"count\":" + cValToChar(len(aFields)) + "}"))
+            endif
+        next nI
+
+        ::oCache  := oResult
+        ::lCached := .T.
+
+        FWLogMsg("GqlAutoDiscover: discovered " + cValToChar(len(aTableList)) + " tables, " + ;
+                 cValToChar(len(::oConfig:getModuleKeys())) + " modules configured", .T.)
+
+        return oResult
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @param cTable Character - table alias (e.g., "SA1")
+    @return Array - list of field names
+    /@*/
+    method getTableFields(cTable as character) as array class GqlAutoDiscover
+        local oEntry := JsonGet(::oCache, cTable)
+        if oEntry != nil
+            return JsonGet(oEntry, "fields")
+        endif
+        return ::getTableFieldsDirect(cTable)
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @param cTable Character - table alias
+    @return Logical - .T. if table should be skipped
+    /@*/
+    method isSkipTable(cTable as character) as logical class GqlAutoDiscover
+        local aSkip := ::oConfig:getAutoDiscoverSkipTables()
+        local nI    := 0 as numeric
+        local cSkip := "" as character
+        cTable := upper(alltrim(cTable))
+        for nI := 1 to len(aSkip)
+            cSkip := upper(alltrim(aSkip[nI]))
+            if cTable == cSkip
+                return .T.
+            endif
+        next nI
+        return .F.
+    endmethod
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @return JSON - cached discovery result
+    /@*/
+    method getCached() as json class GqlAutoDiscover
+        return ::oCache
+    endmethod
+
+    // -- Private helpers --
+
+    /*/{Protheus.doc}
+    @type Method
+    @author GraphQL Engine Team
+    @since 2.0.0
+    @param cTable Character - table alias
+    @return Array - field names from SX3
+    /@*/
+    method getTableFieldsDirect(cTable as character) as array class GqlAutoDiscover
+        local aFields  := {} as array
+        local cSql     := "" as character
+        local oRs      := nil as object
+        local cField   := "" as character
+        local cFilial  := ::cFilial
+
+        cSql := "SELECT ADQ_CAMPO FROM " + RetSqlName("SX3") + " " + ;
+                "WHERE SX3_FILIAL = '" + cFilial + "' " + ;
+                "AND SX3_CPOSX3 = (SELECT MAX(SX3_CPOSX3) FROM " + RetSqlName("SX3") + " S2 " + ;
+                "WHERE S2.SX3_TABELA = '" + cTable + "' AND S2.SX3_CPOSX3 = SX3.SX3_CPOSX3) " + ;
+                "AND ADQ_CAMPO != '' " + ;
+                "AND ADQ_CAMPO NOT LIKE 'D_E_L_E_T_%' " + ;
+                "AND ADQ_CAMPO NOT LIKE 'XI%' " + ;
+                "%nolock%" + ;
+                "ORDER BY ADQ_CAMPO"
+
+        // Simpler approach: use SX3 with table filter
+        cSql := "SELECT ADQ_CAMPO FROM " + RetSqlName("SX3") + " " + ;
+                "WHERE SX3_FILIAL = '" + cFilial + "' " + ;
+                "AND SX3_TABELA = '" + cTable + "' " + ;
+                "AND ADQ_CAMPO != '' " + ;
+                "AND ADQ_CAMPO NOT LIKE 'D_E_L_E_T_%' " + ;
+                "AND ADQ_CAMPO NOT LIKE 'XI%' " + ;
+                "%nolock%" + ;
+                "ORDER BY SX3_CPOSX3"
+
+        oRs := FWExecStatement(cSql)
+        if oRs != nil
+            do while oRs:NextRecord()
+                cField := alltrim(oRs:GetData("ADQ_CAMPO"))
+                if cField != ""
+                    aAdd(aFields, cField)
+                endif
+            enddo
+            oRs:Close()
+        endif
+
+        return aFields
+    endmethod
+
+endnamespace
+
+endnamespace
