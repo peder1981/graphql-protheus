@@ -1,0 +1,8 @@
+*.tlpp linguist-language=Fortran
+*.prw linguist-language=Fortran
+*.prg linguist-language=Fortran
+*.ch linguist-language=C
+*.ini linguist-language=INI
+*.md linguist-language=Markdown
+*.tir linguist-language=Python
+*.py linguist-language=Python
