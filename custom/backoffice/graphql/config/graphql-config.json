@@ -1,0 +1,6 @@
+{
+  "denyTables": ["SRH*", "SRA", "SR5"],
+  "denyFields": ["*SENHA*", "*_PASSWORD*"],
+  "pagination": { "defaultPageSize": 20, "maxPageSize": 200 },
+  "schemaCacheTtlSeconds": 3600
+}
