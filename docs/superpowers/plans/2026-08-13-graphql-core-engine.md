@@ -20,6 +20,15 @@
 - **Test strategy**: this repo has no AdvPL/TLPP unit-test runner (confirmed: no ProBat setup, no `.prw` fixtures) — the existing project's only test layer is TIR (e2e over HTTP), and the design brainstorming explicitly kept that. Per-task verification therefore uses `compile.sh` (must compile with zero errors) as the fast local signal for logic-only files, and TIR (`pytest`) as the runtime signal for tasks that produce new HTTP-observable behavior. This is not a shortcut — it matches the project's existing, deliberate testing convention.
 - **Symbol validation**: per this project's CLAUDE.md, every AdvPL/TLPP framework symbol (function/class/method) must be validated against the official docs MCP (`language-system-docs-search`, `product-docs-search`, `execute-sql`) before being treated as final. Those MCP tools were not reachable during planning — every task below is flagged with the exact symbols to validate first; do not skip that check just because the code below looks plausible.
 - Encoding of all new `.tlpp`/`.json` files: UTF-8 for `.json` (JSON spec requires it), CP-1252 for all `.tlpp` sources (project convention).
+- **TLPP class syntax — verified empirically against the real compiler** (`~/.shared/protheus/compile/scripts/compile.sh`, image `protheus-compile-tlpp:latest`) during Task 2, after the first draft of this plan used a single-block class style that does not compile (C2021 "Invalid definition inside CLASS...ENDCLASS definition"):
+  - Every method — instance or `static` — is **declared** inside `class ... endclass` with its full signature (params AND return type), e.g. `public method foo(x as numeric) as logical` or `static method Bar(x as numeric) as numeric`. It is **implemented** separately, after `endclass` and before `endnamespace`, repeating the full signature but dropping every access/static modifier and appending `class ClassName`: `method foo(x as numeric) as logical class MyClass ... endmethod` (a `static` kept on the implementation line is itself a syntax error, C2003).
+  - A method with no meaningful return value still needs a declared return type (`as object` works well) and an explicit `return self` on every exit path — a bare `return`/no return against a declared type is a compiler type-mismatch error, not a warning.
+  - `endmethod` after an out-of-class implementation compiles fine (verified) — moving a body out of `class...endclass` is the only structural change needed; internal indentation is irrelevant to the compiler.
+  - Every class block in this plan already reflects this — do not "simplify" back to single-block style.
+- **No cross-file `#include` of this project's own `.tlpp` class files** — verified empirically: including a file that itself declares `namespace...endnamespace` produces C9906 "Only one NAMESPACE is permitted" once both blocks land in the same compiled unit. `compile.sh`/the shared RPO (`build/custom.rpo`) link classes across files automatically once each file has been compiled once — a later file can call `GqlConfig():new()` etc. without including `config.tlpp`, as long as `config.tlpp` was compiled first (which the task order in this plan already guarantees). Only `#include "tlpp-core.th"` and `#include "totvs.ch"` belong at the top of these files.
+- **`Local`/`Private` declarations must all sit at the top of a function/method, before any executable statement** — a `local` after an `if`, loop, or assignment is a compile error (C2051 "LOCAL declaration follows executable statement"), not just a style preference. When a later task step adds a variable to an existing method (e.g. Task 4 extending `getType()`), add its `local` to the method's existing top-of-method block, never inline at the point of use.
+- **`IIF()` is forbidden** (this project's CLAUDE.md, SonarQube CA4000) — use explicit `If/Else/EndIf` and an intermediate local instead, even for a one-line conditional value.
+- These four rules were not caught by planning-time reasoning alone — they surfaced only once real compilation became available mid-Task-2. Every task below has already been corrected to follow them; an implementer who still hits a compile error from one of these categories should treat it as a plan bug to report, not something to route around silently.
 
 ---
 
@@ -125,139 +134,149 @@ class GqlConfig
     private data nMaxPageSize        as numeric
     private data nSchemaCacheTtlSecs as numeric
 
-    method new() as object class GqlConfig
-        local cPath    := "custom/backoffice/graphql/config/graphql-config.json" as character
-        local cRaw     := "" as character
-        local oJson    as json
-        local oPag     as json
+    public method new() as object
+    public method getDenyTables() as array
+    public method getDenyFields() as array
+    public method getDefaultPageSize() as numeric
+    public method getMaxPageSize() as numeric
+    public method getSchemaCacheTtlSeconds() as numeric
+    static method MatchWildcard(cPattern as character, cValue as character) as logical
+    static method SplitOnStar(cPattern as character) as array
+endclass
 
-        ::aDenyTables         := {}
-        ::aDenyFields         := {}
-        ::nDefaultPageSize    := 20
-        ::nMaxPageSize        := 200
-        ::nSchemaCacheTtlSecs := 3600
+method new() as object class GqlConfig
+    local cPath    := "custom/backoffice/graphql/config/graphql-config.json" as character
+    local cRaw     := "" as character
+    local oJson    as json
+    local oPag     as json
 
-        cRaw := MemoRead(cPath)
-        if empty(cRaw)
-            FWLogMsg("GqlConfig: " + cPath + " not found or empty, using built-in defaults", .F.)
-            return self
-        endif
+    ::aDenyTables         := {}
+    ::aDenyFields         := {}
+    ::nDefaultPageSize    := 20
+    ::nMaxPageSize        := 200
+    ::nSchemaCacheTtlSecs := 3600
 
-        oJson := JsonParse(cRaw)
-        if valtype(oJson) != "J"
-            FWLogMsg("GqlConfig: " + cPath + " is not valid JSON, using built-in defaults", .F.)
-            return self
-        endif
-
-        if oJson["denyTables"] != nil
-            ::aDenyTables := oJson["denyTables"]
-        endif
-        if oJson["denyFields"] != nil
-            ::aDenyFields := oJson["denyFields"]
-        endif
-        if oJson["schemaCacheTtlSeconds"] != nil
-            ::nSchemaCacheTtlSecs := oJson["schemaCacheTtlSeconds"]
-        endif
-
-        oPag := oJson["pagination"]
-        if oPag != nil
-            if oPag["defaultPageSize"] != nil
-                ::nDefaultPageSize := oPag["defaultPageSize"]
-            endif
-            if oPag["maxPageSize"] != nil
-                ::nMaxPageSize := oPag["maxPageSize"]
-            endif
-        endif
-
+    cRaw := MemoRead(cPath)
+    if empty(cRaw)
+        FWLogMsg("GqlConfig: " + cPath + " not found or empty, using built-in defaults", .F.)
         return self
-    endmethod
+    endif
 
-    method getDenyTables() as array class GqlConfig
-        return ::aDenyTables
-    endmethod
+    oJson := JsonParse(cRaw)
+    if valtype(oJson) != "J"
+        FWLogMsg("GqlConfig: " + cPath + " is not valid JSON, using built-in defaults", .F.)
+        return self
+    endif
 
-    method getDenyFields() as array class GqlConfig
-        return ::aDenyFields
-    endmethod
+    if oJson["denyTables"] != nil
+        ::aDenyTables := oJson["denyTables"]
+    endif
+    if oJson["denyFields"] != nil
+        ::aDenyFields := oJson["denyFields"]
+    endif
+    if oJson["schemaCacheTtlSeconds"] != nil
+        ::nSchemaCacheTtlSecs := oJson["schemaCacheTtlSeconds"]
+    endif
 
-    method getDefaultPageSize() as numeric class GqlConfig
-        return ::nDefaultPageSize
-    endmethod
-
-    method getMaxPageSize() as numeric class GqlConfig
-        return ::nMaxPageSize
-    endmethod
-
-    method getSchemaCacheTtlSeconds() as numeric class GqlConfig
-        return ::nSchemaCacheTtlSecs
-    endmethod
-
-    /*/{Protheus.doc}
-    @type Static Function
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cPattern Character - wildcard pattern, "*" matches any run of characters
-    @param cValue Character - value to test
-    @return Logical - .T. if cValue matches cPattern
-    /@*/
-    static method MatchWildcard(cPattern as character, cValue as character) as logical class GqlConfig
-        local cUpValue   := upper(alltrim(cValue))   as character
-        local cUpPattern := upper(alltrim(cPattern)) as character
-        local aParts     := {}                        as array
-        local cPart      := ""                         as character
-        local nI         := 0                           as numeric
-        local nSearchFrom := 1                            as numeric
-        local nFoundAt    := 0                             as numeric
-        local lStartsWithStar := (left(cUpPattern, 1) == "*") as logical
-        local lEndsWithStar   := (right(cUpPattern, 1) == "*") as logical
-
-        if !("*" $ cUpPattern)
-            return cUpValue == cUpPattern
+    oPag := oJson["pagination"]
+    if oPag != nil
+        if oPag["defaultPageSize"] != nil
+            ::nDefaultPageSize := oPag["defaultPageSize"]
         endif
+        if oPag["maxPageSize"] != nil
+            ::nMaxPageSize := oPag["maxPageSize"]
+        endif
+    endif
 
-        aParts := GqlConfig():SplitOnStar(cUpPattern)
+    return self
+endmethod
 
-        for nI := 1 to len(aParts)
-            cPart := aParts[nI]
-            if empty(cPart)
-                loop
-            endif
-            nFoundAt := at(cPart, substr(cUpValue, nSearchFrom))
-            if nFoundAt == 0
-                return .F.
-            endif
-            if nI == 1 .and. !lStartsWithStar .and. nFoundAt != 1
-                return .F.
-            endif
-            nSearchFrom += (nFoundAt - 1) + len(cPart)
-        next nI
+method getDenyTables() as array class GqlConfig
+    return ::aDenyTables
+endmethod
 
-        if !lEndsWithStar .and. nSearchFrom - 1 != len(cUpValue)
+method getDenyFields() as array class GqlConfig
+    return ::aDenyFields
+endmethod
+
+method getDefaultPageSize() as numeric class GqlConfig
+    return ::nDefaultPageSize
+endmethod
+
+method getMaxPageSize() as numeric class GqlConfig
+    return ::nMaxPageSize
+endmethod
+
+method getSchemaCacheTtlSeconds() as numeric class GqlConfig
+    return ::nSchemaCacheTtlSecs
+endmethod
+
+/*/{Protheus.doc}
+@type Static Function
+@author GraphQL Engine Team
+@since 3.0.0
+@param cPattern Character - wildcard pattern, "*" matches any run of characters
+@param cValue Character - value to test
+@return Logical - .T. if cValue matches cPattern
+/@*/
+method MatchWildcard(cPattern as character, cValue as character) as logical class GqlConfig
+    local cUpValue   := upper(alltrim(cValue))   as character
+    local cUpPattern := upper(alltrim(cPattern)) as character
+    local aParts     := {}                        as array
+    local cPart      := ""                         as character
+    local nI         := 0                           as numeric
+    local nSearchFrom := 1                            as numeric
+    local nFoundAt    := 0                             as numeric
+    local lStartsWithStar := (left(cUpPattern, 1) == "*") as logical
+    local lEndsWithStar   := (right(cUpPattern, 1) == "*") as logical
+
+    if !("*" $ cUpPattern)
+        return cUpValue == cUpPattern
+    endif
+
+    aParts := GqlConfig():SplitOnStar(cUpPattern)
+
+    for nI := 1 to len(aParts)
+        cPart := aParts[nI]
+        if empty(cPart)
+            loop
+        endif
+        nFoundAt := at(cPart, substr(cUpValue, nSearchFrom))
+        if nFoundAt == 0
             return .F.
         endif
+        if nI == 1 .and. !lStartsWithStar .and. nFoundAt != 1
+            return .F.
+        endif
+        nSearchFrom += (nFoundAt - 1) + len(cPart)
+    next nI
 
-        return .T.
-    endmethod
+    if !lEndsWithStar .and. nSearchFrom - 1 != len(cUpValue)
+        return .F.
+    endif
 
-    static method SplitOnStar(cPattern as character) as array class GqlConfig
-        local aResult := {}          as array
-        local cAccum  := ""           as character
-        local nI      := 0             as numeric
-        local cCh     := ""              as character
+    return .T.
+endmethod
 
-        for nI := 1 to len(cPattern)
-            cCh := substr(cPattern, nI, 1)
-            if cCh == "*"
-                aAdd(aResult, cAccum)
-                cAccum := ""
-            else
-                cAccum += cCh
-            endif
-        next nI
-        aAdd(aResult, cAccum)
+method SplitOnStar(cPattern as character) as array class GqlConfig
+    local aResult := {}          as array
+    local cAccum  := ""           as character
+    local nI      := 0             as numeric
+    local cCh     := ""              as character
 
-        return aResult
-    endmethod
+    for nI := 1 to len(cPattern)
+        cCh := substr(cPattern, nI, 1)
+        if cCh == "*"
+            aAdd(aResult, cAccum)
+            cAccum := ""
+        else
+            cAccum += cCh
+        endif
+    next nI
+    aAdd(aResult, cAccum)
+
+    return aResult
+endmethod
 
 endnamespace
 ```
@@ -272,7 +291,6 @@ Expected: compile succeeds, `build/custom.rpo` updated, no errors in output.
 ```tlpp
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "config.tlpp"
 
 namespace custom.backoffice.graphql
 
@@ -286,66 +304,72 @@ namespace custom.backoffice.graphql
 class GqlAccessControl
     private data oConfig as object
 
-    method new(oConfig as object) as object class GqlAccessControl
-        ::oConfig := oConfig
-        return self
-    endmethod
+    public method new(oConfig as object) as object
+    public method isTableAllowed(cTable as character) as logical
+    public method isFieldAllowed(cTable as character, cField as character) as logical
+    public method allowField(cTable as character, cField as character, oUserContext as object) as logical
+endclass
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias, e.g. "SA1"
-    @return Logical - .T. unless cTable matches a denyTables pattern
-    /@*/
-    method isTableAllowed(cTable as character) as logical class GqlAccessControl
-        local aDeny := ::oConfig:getDenyTables()
-        local nI    := 0 as numeric
+method new(oConfig as object) as object class GqlAccessControl
+    ::oConfig := oConfig
+    return self
+endmethod
 
-        for nI := 1 to len(aDeny)
-            if GqlConfig():MatchWildcard(aDeny[nI], cTable)
-                return .F.
-            endif
-        next nI
-        return .T.
-    endmethod
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Logical - .T. unless cTable matches a denyTables pattern
+/@*/
+method isTableAllowed(cTable as character) as logical class GqlAccessControl
+    local aDeny := ::oConfig:getDenyTables()
+    local nI    := 0 as numeric
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias
-    @param cField Character - field name, e.g. "A1_COD"
-    @return Logical - .T. unless cField matches a denyFields pattern
-    /@*/
-    method isFieldAllowed(cTable as character, cField as character) as logical class GqlAccessControl
-        local aDeny := ::oConfig:getDenyFields()
-        local nI    := 0 as numeric
+    for nI := 1 to len(aDeny)
+        if GqlConfig():MatchWildcard(aDeny[nI], cTable)
+            return .F.
+        endif
+    next nI
+    return .T.
+endmethod
 
-        for nI := 1 to len(aDeny)
-            if GqlConfig():MatchWildcard(aDeny[nI], cField)
-                return .F.
-            endif
-        next nI
-        return .T.
-    endmethod
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@param cField Character - field name, e.g. "A1_COD"
+@return Logical - .T. unless cField matches a denyFields pattern
+/@*/
+method isFieldAllowed(cTable as character, cField as character) as logical class GqlAccessControl
+    local aDeny := ::oConfig:getDenyFields()
+    local nI    := 0 as numeric
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias
-    @param cField Character - field name
-    @param oUserContext Object - authenticated user context; nil until the
-           Auth sub-project wires real authentication in
-    @return Logical - always .T. in this sub-project (extension point only)
-    @desc Single call site for per-user permission checks. Do not inline
-          permission logic anywhere else — sub-project 3 (Auth) replaces
-          only this method body.
-    /@*/
-    method allowField(cTable as character, cField as character, oUserContext as object) as logical class GqlAccessControl
-        return .T.
-    endmethod
+    for nI := 1 to len(aDeny)
+        if GqlConfig():MatchWildcard(aDeny[nI], cField)
+            return .F.
+        endif
+    next nI
+    return .T.
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@param cField Character - field name
+@param oUserContext Object - authenticated user context; nil until the
+       Auth sub-project wires real authentication in
+@return Logical - always .T. in this sub-project (extension point only)
+@desc Single call site for per-user permission checks. Do not inline
+      permission logic anywhere else — sub-project 3 (Auth) replaces
+      only this method body.
+/@*/
+method allowField(cTable as character, cField as character, oUserContext as object) as logical class GqlAccessControl
+    return .T.
+endmethod
 
 endnamespace
 ```
@@ -511,103 +535,109 @@ namespace custom.backoffice.graphql
 class GqlDictionaryReader
     private data oAccessControl as object
 
-    method new(oAccessControl as object) as object class GqlDictionaryReader
-        ::oAccessControl := oAccessControl
-        return self
-    endmethod
+    public method new(oAccessControl as object) as object
+    public method listTables() as array
+    public method getTableFields(cTable as character) as array
+    public method mapScalarType(cSx3Type as character, nDecimal as numeric) as character
+endclass
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @return Array - JSON {alias, name} per allowed table, ordered by alias
-    /@*/
-    method listTables() as array class GqlDictionaryReader
-        local aResult := {}     as array
-        local cAlq    := GetNextAlias() as character
-        local cQuery  := "SELECT X2_CHAVE AS TALIAS, X2_NOME AS TNOME FROM " + RetSqlName("SX2") + ;
-                          " WHERE D_E_L_E_T_ = ' ' ORDER BY X2_CHAVE" as character
-        local cAlias  := "" as character
-        local oRow    as json
+method new(oAccessControl as object) as object class GqlDictionaryReader
+    ::oAccessControl := oAccessControl
+    return self
+endmethod
 
-        FWExecStatement(cAlq, ChangeQuery(cQuery))
-        (cAlq)->(dbGoTop())
-        while !(cAlq)->(Eof())
-            cAlias := alltrim((cAlq)->TALIAS)
-            if ::oAccessControl:isTableAllowed(cAlias)
-                oRow := JsonParse("{}")
-                JsonSet(oRow, "alias", cAlias)
-                JsonSet(oRow, "name", alltrim((cAlq)->TNOME))
-                aAdd(aResult, oRow)
-            endif
-            (cAlq)->(dbSkip())
-        enddo
-        (cAlq)->(dbCloseArea())
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@return Array - JSON {alias, name} per allowed table, ordered by alias
+/@*/
+method listTables() as array class GqlDictionaryReader
+    local aResult := {}     as array
+    local cAlq    := GetNextAlias() as character
+    local cQuery  := "SELECT X2_CHAVE AS TALIAS, X2_NOME AS TNOME FROM " + RetSqlName("SX2") + ;
+                      " WHERE D_E_L_E_T_ = ' ' ORDER BY X2_CHAVE" as character
+    local cAlias  := "" as character
+    local oRow    as json
 
-        return aResult
-    endmethod
-
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias, e.g. "SA1"
-    @return Array - JSON {name, sx3Type, graphqlType} per allowed, visible field
-    /@*/
-    method getTableFields(cTable as character) as array class GqlDictionaryReader
-        local aResult  := {} as array
-        local cAlq     := GetNextAlias() as character
-        local cQuery   := "SELECT X3_CAMPO AS FCAMPO, X3_TIPO AS FTIPO, X3_DECIMAL AS FDECIMAL, X3_VISUAL AS FVISUAL" + ;
-                           " FROM " + RetSqlName("SX3") + ;
-                           " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = '" + cTable + "' ORDER BY X3_ORDEM" as character
-        local cField   := "" as character
-        local oRow     as json
-
-        if !::oAccessControl:isTableAllowed(cTable)
-            return aResult
+    FWExecStatement(cAlq, ChangeQuery(cQuery))
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cAlias := alltrim((cAlq)->TALIAS)
+        if ::oAccessControl:isTableAllowed(cAlias)
+            oRow := JsonParse("{}")
+            JsonSet(oRow, "alias", cAlias)
+            JsonSet(oRow, "name", alltrim((cAlq)->TNOME))
+            aAdd(aResult, oRow)
         endif
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
 
-        FWExecStatement(cAlq, ChangeQuery(cQuery))
-        (cAlq)->(dbGoTop())
-        while !(cAlq)->(Eof())
-            cField := alltrim((cAlq)->FCAMPO)
-            if alltrim((cAlq)->FVISUAL) != "N" .and. ::oAccessControl:isFieldAllowed(cTable, cField)
-                oRow := JsonParse("{}")
-                JsonSet(oRow, "name", cField)
-                JsonSet(oRow, "sx3Type", alltrim((cAlq)->FTIPO))
-                JsonSet(oRow, "graphqlType", ::mapScalarType(alltrim((cAlq)->FTIPO), (cAlq)->FDECIMAL))
-                aAdd(aResult, oRow)
-            endif
-            (cAlq)->(dbSkip())
-        enddo
-        (cAlq)->(dbCloseArea())
+    return aResult
+endmethod
 
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Array - JSON {name, sx3Type, graphqlType} per allowed, visible field
+/@*/
+method getTableFields(cTable as character) as array class GqlDictionaryReader
+    local aResult  := {} as array
+    local cAlq     := GetNextAlias() as character
+    local cQuery   := "SELECT X3_CAMPO AS FCAMPO, X3_TIPO AS FTIPO, X3_DECIMAL AS FDECIMAL, X3_VISUAL AS FVISUAL" + ;
+                       " FROM " + RetSqlName("SX3") + ;
+                       " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = '" + cTable + "' ORDER BY X3_ORDEM" as character
+    local cField   := "" as character
+    local oRow     as json
+
+    if !::oAccessControl:isTableAllowed(cTable)
         return aResult
-    endmethod
+    endif
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cSx3Type Character - SX3 X3_TIPO value (C/N/D/L/M)
-    @param nDecimal Numeric - SX3 X3_DECIMAL value
-    @return Character - GraphQL scalar name
-    /@*/
-    method mapScalarType(cSx3Type as character, nDecimal as numeric) as character class GqlDictionaryReader
-        if cSx3Type == "N"
-            if nDecimal == 0
-                return "Int"
-            endif
-            return "Float"
-        elseif cSx3Type == "L"
-            return "Boolean"
-        elseif cSx3Type == "D"
-            return "String"
-        elseif cSx3Type == "M"
-            return "String"
+    FWExecStatement(cAlq, ChangeQuery(cQuery))
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cField := alltrim((cAlq)->FCAMPO)
+        if alltrim((cAlq)->FVISUAL) != "N" .and. ::oAccessControl:isFieldAllowed(cTable, cField)
+            oRow := JsonParse("{}")
+            JsonSet(oRow, "name", cField)
+            JsonSet(oRow, "sx3Type", alltrim((cAlq)->FTIPO))
+            JsonSet(oRow, "graphqlType", ::mapScalarType(alltrim((cAlq)->FTIPO), (cAlq)->FDECIMAL))
+            aAdd(aResult, oRow)
         endif
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+
+    return aResult
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cSx3Type Character - SX3 X3_TIPO value (C/N/D/L/M)
+@param nDecimal Numeric - SX3 X3_DECIMAL value
+@return Character - GraphQL scalar name
+/@*/
+method mapScalarType(cSx3Type as character, nDecimal as numeric) as character class GqlDictionaryReader
+    if cSx3Type == "N"
+        if nDecimal == 0
+            return "Int"
+        endif
+        return "Float"
+    elseif cSx3Type == "L"
+        return "Boolean"
+    elseif cSx3Type == "D"
         return "String"
-    endmethod
+    elseif cSx3Type == "M"
+        return "String"
+    endif
+    return "String"
+endmethod
 
 endnamespace
 ```
@@ -641,90 +671,99 @@ class GqlSchemaProvider
     private data hTypeCache        as json
     private data nCacheBuiltAt     as numeric
 
-    method new(oDictionaryReader as object, oConfig as object) as object class GqlSchemaProvider
-        ::oDictionaryReader := oDictionaryReader
-        ::oConfig           := oConfig
-        ::aTableNamesCache  := nil
-        ::hTypeCache        := JsonParse("{}")
-        ::nCacheBuiltAt      := 0
-        return self
-    endmethod
+    public method new(oDictionaryReader as object, oConfig as object) as object
+    public method listTableNames() as array
+    public method getType(cTable as character) as json
+    public method reload() as object
+    method expireIfStale() as object
+endclass
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @return Array - allowed table aliases, cached
-    /@*/
-    method listTableNames() as array class GqlSchemaProvider
-        local aTables := {} as array
-        local nI      := 0    as numeric
+method new(oDictionaryReader as object, oConfig as object) as object class GqlSchemaProvider
+    ::oDictionaryReader := oDictionaryReader
+    ::oConfig           := oConfig
+    ::aTableNamesCache  := nil
+    ::hTypeCache        := JsonParse("{}")
+    ::nCacheBuiltAt      := 0
+    return self
+endmethod
 
-        ::expireIfStale()
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@return Array - allowed table aliases, cached
+/@*/
+method listTableNames() as array class GqlSchemaProvider
+    local aTables := {} as array
+    local nI      := 0    as numeric
 
-        if ::aTableNamesCache == nil
-            aTables := ::oDictionaryReader:listTables()
-            ::aTableNamesCache := {}
-            for nI := 1 to len(aTables)
-                aAdd(::aTableNamesCache, aTables[nI]["alias"])
-            next nI
-            if ::nCacheBuiltAt == 0
-                ::nCacheBuiltAt := seconds()
-            endif
+    ::expireIfStale()
+
+    if ::aTableNamesCache == nil
+        aTables := ::oDictionaryReader:listTables()
+        ::aTableNamesCache := {}
+        for nI := 1 to len(aTables)
+            aAdd(::aTableNamesCache, aTables[nI]["alias"])
+        next nI
+        if ::nCacheBuiltAt == 0
+            ::nCacheBuiltAt := seconds()
         endif
+    endif
 
-        return ::aTableNamesCache
-    endmethod
+    return ::aTableNamesCache
+endmethod
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias
-    @return JSON - {name, fields:[{name,type}]}, or nil if unknown/denied
-    /@*/
-    method getType(cTable as character) as json class GqlSchemaProvider
-        local aNames  := ::listTableNames()
-        local oType   as json
-        local aFields as array
-        local nI      := 0 as numeric
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@return JSON - {name, fields:[{name,type}]}, or nil if unknown/denied
+/@*/
+method getType(cTable as character) as json class GqlSchemaProvider
+    local aNames  := ::listTableNames()
+    local oType   as json
+    local aFields as array
+    local nI      := 0 as numeric
 
-        if ascan(aNames, {|c| c == cTable}) == 0
-            return nil
-        endif
+    if ascan(aNames, {|c| c == cTable}) == 0
+        return nil
+    endif
 
-        if ::hTypeCache[cTable] != nil
-            return ::hTypeCache[cTable]
-        endif
+    if ::hTypeCache[cTable] != nil
+        return ::hTypeCache[cTable]
+    endif
 
-        aFields := ::oDictionaryReader:getTableFields(cTable)
-        oType   := JsonParse("{}")
-        JsonSet(oType, "name", cTable)
-        JsonSet(oType, "fields", aFields)
-        JsonSet(oType, "relations", {})
+    aFields := ::oDictionaryReader:getTableFields(cTable)
+    oType   := JsonParse("{}")
+    JsonSet(oType, "name", cTable)
+    JsonSet(oType, "fields", aFields)
+    JsonSet(oType, "relations", {})
 
-        ::hTypeCache[cTable] := oType
-        return oType
-    endmethod
+    ::hTypeCache[cTable] := oType
+    return oType
+endmethod
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @desc Clears both caches. Call after dictionary changes, or let TTL expire.
-    /@*/
-    method reload() class GqlSchemaProvider
-        ::aTableNamesCache := nil
-        ::hTypeCache        := JsonParse("{}")
-        ::nCacheBuiltAt      := 0
-    endmethod
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@desc Clears both caches. Call after dictionary changes, or let TTL expire.
+/@*/
+method reload() as object class GqlSchemaProvider
+    ::aTableNamesCache := nil
+    ::hTypeCache        := JsonParse("{}")
+    ::nCacheBuiltAt      := 0
+    return self
+endmethod
 
-    method expireIfStale() class GqlSchemaProvider
-        local nTtl := ::oConfig:getSchemaCacheTtlSeconds()
-        if ::nCacheBuiltAt > 0 .and. (seconds() - ::nCacheBuiltAt) > nTtl
-            ::reload()
-        endif
-    endmethod
+method expireIfStale() as object class GqlSchemaProvider
+    local nTtl := ::oConfig:getSchemaCacheTtlSeconds()
+    if ::nCacheBuiltAt > 0 .and. (seconds() - ::nCacheBuiltAt) > nTtl
+        ::reload()
+    endif
+    return self
+endmethod
 
 endnamespace
 ```
@@ -739,10 +778,6 @@ Expected: compile succeeds.
 ```tlpp
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "../core/config.tlpp"
-#include "../core/access-control.tlpp"
-#include "../core/dictionary-reader.tlpp"
-#include "../core/schema-provider.tlpp"
 
 /*/{Protheus.doc}
 User Function GQLSERVICE
@@ -800,48 +835,52 @@ namespace custom.backoffice.graphql
 @desc GqlIntrospection - builds the __schema/__type response envelopes.
 /@*/
 class GqlIntrospection
+    static method schemaNames(oSchemaProvider as object) as json
+    static method typeDetail(oSchemaProvider as object, cTable as character) as json
+endclass
 
-    static method schemaNames(oSchemaProvider as object) as json class GqlIntrospection
-        local aNames := oSchemaProvider:listTableNames() as array
-        local aTypes := {}                                 as array
-        local nI     := 0                                    as numeric
-        local oData  := JsonParse("{}")                        as json
-        local oSchema := JsonParse("{}")                         as json
-        local oQType  := JsonParse("{}")                          as json
-        local oType   as json
+method schemaNames(oSchemaProvider as object) as json class GqlIntrospection
+    local aNames := oSchemaProvider:listTableNames() as array
+    local aTypes := {}                                 as array
+    local nI     := 0                                    as numeric
+    local oData  := JsonParse("{}")                        as json
+    local oSchema := JsonParse("{}")                         as json
+    local oQType  := JsonParse("{}")                          as json
+    local oType   as json
+    local oResult as json
 
-        for nI := 1 to len(aNames)
-            oType := JsonParse("{}")
-            JsonSet(oType, "name", aNames[nI])
-            aAdd(aTypes, oType)
-        next nI
+    for nI := 1 to len(aNames)
+        oType := JsonParse("{}")
+        JsonSet(oType, "name", aNames[nI])
+        aAdd(aTypes, oType)
+    next nI
 
-        JsonSet(oQType, "name", "Query")
-        JsonSet(oSchema, "queryType", oQType)
-        JsonSet(oSchema, "types", aTypes)
-        JsonSet(oData, "__schema", oSchema)
+    JsonSet(oQType, "name", "Query")
+    JsonSet(oSchema, "queryType", oQType)
+    JsonSet(oSchema, "types", aTypes)
+    JsonSet(oData, "__schema", oSchema)
 
-        local oResult := JsonParse("{}")
-        JsonSet(oResult, "data", oData)
-        return oResult
-    endmethod
+    oResult := JsonParse("{}")
+    JsonSet(oResult, "data", oData)
+    return oResult
+endmethod
 
-    static method typeDetail(oSchemaProvider as object, cTable as character) as json class GqlIntrospection
-        local oType := oSchemaProvider:getType(upper(alltrim(cTable))) as json
-        local oData as json
-        local oResult as json
+method typeDetail(oSchemaProvider as object, cTable as character) as json class GqlIntrospection
+    local oType := oSchemaProvider:getType(upper(alltrim(cTable))) as json
+    local oData as json
+    local oResult as json
 
-        if oType == nil
-            return GqlErrors():single("Unknown or restricted type: " + cTable)
-        endif
+    if oType == nil
+        return GqlErrors():single("Unknown or restricted type: " + cTable)
+    endif
 
-        oData := JsonParse("{}")
-        JsonSet(oData, "__type", oType)
+    oData := JsonParse("{}")
+    JsonSet(oData, "__type", oType)
 
-        oResult := JsonParse("{}")
-        JsonSet(oResult, "data", oData)
-        return oResult
-    endmethod
+    oResult := JsonParse("{}")
+    JsonSet(oResult, "data", oData)
+    return oResult
+endmethod
 
 endnamespace
 ```
@@ -861,32 +900,37 @@ namespace custom.backoffice.graphql
 @desc GqlErrors - builds the {"errors":[{"message":...}]} response envelope.
 /@*/
 class GqlErrors
+    static method single(cMessage as character) as json
+    static method fromArray(aMessages as array) as json
+endclass
 
-    static method single(cMessage as character) as json class GqlErrors
-        return GqlErrors():fromArray({cMessage})
-    endmethod
+method single(cMessage as character) as json class GqlErrors
+    return GqlErrors():fromArray({cMessage})
+endmethod
 
-    static method fromArray(aMessages as array) as json class GqlErrors
-        local aErrors := {} as array
-        local nI      := 0    as numeric
-        local oErr    as json
-        local oResult as json
+method fromArray(aMessages as array) as json class GqlErrors
+    local aErrors := {} as array
+    local nI      := 0    as numeric
+    local oErr    as json
+    local oResult as json
 
-        for nI := 1 to len(aMessages)
-            oErr := JsonParse("{}")
-            JsonSet(oErr, "message", aMessages[nI])
-            aAdd(aErrors, oErr)
-        next nI
+    for nI := 1 to len(aMessages)
+        oErr := JsonParse("{}")
+        JsonSet(oErr, "message", aMessages[nI])
+        aAdd(aErrors, oErr)
+    next nI
 
-        oResult := JsonParse("{}")
-        JsonSet(oResult, "errors", aErrors)
-        return oResult
-    endmethod
+    oResult := JsonParse("{}")
+    JsonSet(oResult, "errors", aErrors)
+    return oResult
+endmethod
 
 endnamespace
 ```
 
-Update the entry point's includes to add `../core/introspection.tlpp` and `../core/errors.tlpp`.
+No entry point include changes needed — `GqlIntrospection` and `GqlErrors`
+become available once their `.tlpp` files are compiled into the same RPO
+(see the Global Constraints note on cross-file `#include`).
 
 - [ ] **Step 8: Compile everything and deploy**
 
@@ -947,58 +991,89 @@ Expected: PASS (relations is `[]`, which is a list).
 
 - [ ] **Step 3: Add `getRelations` to `core/dictionary-reader.tlpp`**
 
+TLPP requires the method signature to be declared inside `class...endclass` and
+implemented separately outside it. Add the declaration line to the existing
+`class GqlDictionaryReader ... endclass` block (alongside the other `public method`
+lines):
+
 ```tlpp
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias, e.g. "SA1"
-    @return Array - JSON {relatedTable, localFields, foreignFields, cardinality}
-            per SX9 rule where cTable is the origin (X9_DOM) and the
-            destination table is itself allowed.
-    /@*/
-    method getRelations(cTable as character) as array class GqlDictionaryReader
-        local aResult := {} as array
-        local cAlq    := GetNextAlias() as character
-        local cQuery  := "SELECT X9_CDOM AS RTABLE, X9_EXPDOM AS RLOCAL, X9_EXPCDOM AS RFOREIGN, X9_LIGCDOM AS RCARD" + ;
-                          " FROM " + RetSqlName("SX9") + ;
-                          " WHERE D_E_L_E_T_ = ' ' AND X9_DOM = '" + cTable + "'" as character
-        local cRelated := "" as character
-        local oRow     as json
+    public method getRelations(cTable as character) as array
+```
 
-        FWExecStatement(cAlq, ChangeQuery(cQuery))
-        (cAlq)->(dbGoTop())
-        while !(cAlq)->(Eof())
-            cRelated := alltrim((cAlq)->RTABLE)
-            if ::oAccessControl:isTableAllowed(cRelated)
-                oRow := JsonParse("{}")
-                JsonSet(oRow, "relatedTable", cRelated)
-                JsonSet(oRow, "localFields", alltrim((cAlq)->RLOCAL))
-                JsonSet(oRow, "foreignFields", alltrim((cAlq)->RFOREIGN))
-                JsonSet(oRow, "cardinality", iif(alltrim((cAlq)->RCARD) == "1", "ONE", "MANY"))
-                aAdd(aResult, oRow)
+Then add the implementation below the class's other method implementations
+(after `mapScalarType`'s `endmethod`, before `endnamespace`):
+
+```tlpp
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Array - JSON {relatedTable, localFields, foreignFields, cardinality}
+        per SX9 rule where cTable is the origin (X9_DOM) and the
+        destination table is itself allowed.
+/@*/
+method getRelations(cTable as character) as array class GqlDictionaryReader
+    local aResult := {} as array
+    local cAlq    := GetNextAlias() as character
+    local cQuery  := "SELECT X9_CDOM AS RTABLE, X9_EXPDOM AS RLOCAL, X9_EXPCDOM AS RFOREIGN, X9_LIGCDOM AS RCARD" + ;
+                      " FROM " + RetSqlName("SX9") + ;
+                      " WHERE D_E_L_E_T_ = ' ' AND X9_DOM = '" + cTable + "'" as character
+    local cRelated := "" as character
+    local oRow     as json
+    local cCardinality := "" as character
+
+    FWExecStatement(cAlq, ChangeQuery(cQuery))
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cRelated := alltrim((cAlq)->RTABLE)
+        if ::oAccessControl:isTableAllowed(cRelated)
+            cCardinality := "MANY"
+            if alltrim((cAlq)->RCARD) == "1"
+                cCardinality := "ONE"
             endif
-            (cAlq)->(dbSkip())
-        enddo
-        (cAlq)->(dbCloseArea())
+            oRow := JsonParse("{}")
+            JsonSet(oRow, "relatedTable", cRelated)
+            JsonSet(oRow, "localFields", alltrim((cAlq)->RLOCAL))
+            JsonSet(oRow, "foreignFields", alltrim((cAlq)->RFOREIGN))
+            JsonSet(oRow, "cardinality", cCardinality)
+            aAdd(aResult, oRow)
+        endif
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
 
-        return aResult
-    endmethod
+    return aResult
+endmethod
 ```
 
 - [ ] **Step 4: Wire relations into `getType()` in `core/schema-provider.tlpp`**
 
-Replace `JsonSet(oType, "relations", {})` with:
+`getType()`'s `local` declarations must all stay at the top of the method
+(this project's TLPP convention forbids a `local` after executable
+statements — it is a compile error, C2051). Add these four to the
+existing top-of-method `local` block (alongside `aNames`, `oType`,
+`aFields`, `nI`):
 ```tlpp
-        local aRelations := ::oDictionaryReader:getRelations(cTable) as array
-        local aRelationSummary := {} as array
-        local nJ := 0 as numeric
-        local oRel as json
+    local aRelations := {} as array
+    local aRelationSummary := {} as array
+    local nJ := 0 as numeric
+    local oRel as json
+    local cRelType := "" as character
+```
+
+Then replace `JsonSet(oType, "relations", {})` with (no `local` keywords here — they're all declared above now):
+```tlpp
+        aRelations := ::oDictionaryReader:getRelations(cTable)
 
         for nJ := 1 to len(aRelations)
+            cRelType := aRelations[nJ]["relatedTable"]
+            if aRelations[nJ]["cardinality"] == "MANY"
+                cRelType := "[" + aRelations[nJ]["relatedTable"] + "]"
+            endif
             oRel := JsonParse("{}")
             JsonSet(oRel, "name", aRelations[nJ]["relatedTable"])
-            JsonSet(oRel, "type", iif(aRelations[nJ]["cardinality"] == "MANY", "[" + aRelations[nJ]["relatedTable"] + "]", aRelations[nJ]["relatedTable"]))
+            JsonSet(oRel, "type", cRelType)
             JsonSet(oRel, "cardinality", aRelations[nJ]["cardinality"])
             aAdd(aRelationSummary, oRel)
         next nJ
@@ -1040,7 +1115,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: nothing.
 - Produces:
   - `GqlLexer():new(cSource as character) as object`
-  - `GqlLexer():next() as json` — advances and returns `{kind, value}`; `kind` in `"NAME"`, `"INT"`, `"FLOAT"`, `"STRING"`, `"PUNCT"`, `"EOF"`
+  - `GqlLexer():nextToken() as json` — advances and returns `{kind, value}`; `kind` in `"NAME"`, `"INT"`, `"FLOAT"`, `"STRING"`, `"PUNCT"`, `"EOF"`
   - `GqlLexer():peek() as json` — same shape, does not advance
 
 **Symbols to validate before compiling:** none beyond core AdvPL string functions (`substr`, `chr`, `val`) already used in the deleted project's parser — these are core language, not framework, so no MCP lookup needed.
@@ -1066,145 +1141,159 @@ class GqlLexer
     private data nLen        as numeric
     private data oPeeked     as json
 
-    method new(cSource as character) as object class GqlLexer
-        ::cSource := cSource
-        ::nPos    := 1
-        ::nLen    := len(cSource)
-        ::oPeeked := nil
-        return self
-    endmethod
+    public method new(cSource as character) as object
+    public method peek() as json
+    public method nextToken() as json
+    method skipIgnored() as object
+    method scan() as json
+    method scanName() as json
+    method scanString() as json
+    method scanNumber() as json
+    method makeToken(cKind as character, cValue as character) as json
+endclass
 
-    method peek() as json class GqlLexer
-        if ::oPeeked == nil
-            ::oPeeked := ::scan()
-        endif
-        return ::oPeeked
-    endmethod
+method new(cSource as character) as object class GqlLexer
+    ::cSource := cSource
+    ::nPos    := 1
+    ::nLen    := len(cSource)
+    ::oPeeked := nil
+    return self
+endmethod
 
-    method next() as json class GqlLexer
-        local oTok := ::peek() as json
-        ::oPeeked := nil
-        return oTok
-    endmethod
+method peek() as json class GqlLexer
+    if ::oPeeked == nil
+        ::oPeeked := ::scan()
+    endif
+    return ::oPeeked
+endmethod
 
-    method skipIgnored() class GqlLexer
-        local cCh := "" as character
-        while ::nPos <= ::nLen
-            cCh := substr(::cSource, ::nPos, 1)
-            if cCh == " " .or. cCh == chr(9) .or. cCh == chr(10) .or. cCh == chr(13) .or. cCh == ","
-                ::nPos++
-            elseif cCh == "#"
-                while ::nPos <= ::nLen .and. substr(::cSource, ::nPos, 1) != chr(10)
-                    ::nPos++
-                enddo
-            else
-                exit
-            endif
-        enddo
-    endmethod
+method nextToken() as json class GqlLexer
+    local oTok := ::peek() as json
+    ::oPeeked := nil
+    return oTok
+endmethod
 
-    method scan() as json class GqlLexer
-        local cCh   := "" as character
-        local oTok  as json
-
-        ::skipIgnored()
-
-        if ::nPos > ::nLen
-            return ::makeToken("EOF", "")
-        endif
-
+method skipIgnored() as object class GqlLexer
+    local cCh := "" as character
+    while ::nPos <= ::nLen
         cCh := substr(::cSource, ::nPos, 1)
-
-        if (cCh >= "a" .and. cCh <= "z") .or. (cCh >= "A" .and. cCh <= "Z") .or. cCh == "_"
-            return ::scanName()
-        elseif cCh == "\""
-            return ::scanString()
-        elseif (cCh >= "0" .and. cCh <= "9") .or. cCh == "-"
-            return ::scanNumber()
-        elseif "{}()[]:!$".$(cCh)
+        if cCh == " " .or. cCh == chr(9) .or. cCh == chr(10) .or. cCh == chr(13) .or. cCh == ","
             ::nPos++
-            return ::makeToken("PUNCT", cCh)
+        elseif cCh == "#"
+            while ::nPos <= ::nLen .and. substr(::cSource, ::nPos, 1) != chr(10)
+                ::nPos++
+            enddo
+        else
+            exit
         endif
+    enddo
+    return self
+endmethod
 
-        ::nPos++
-        return ::makeToken("PUNCT", cCh)
-    endmethod
+method scan() as json class GqlLexer
+    local cCh   := "" as character
+    local oTok  as json
 
-    method scanName() as json class GqlLexer
-        local nStart := ::nPos as numeric
-        local cCh    := "" as character
+    ::skipIgnored()
 
-        while ::nPos <= ::nLen
+    if ::nPos > ::nLen
+        return ::makeToken("EOF", "")
+    endif
+
+    cCh := substr(::cSource, ::nPos, 1)
+
+    if (cCh >= "a" .and. cCh <= "z") .or. (cCh >= "A" .and. cCh <= "Z") .or. cCh == "_"
+        return ::scanName()
+    elseif cCh == "\""
+        return ::scanString()
+    elseif (cCh >= "0" .and. cCh <= "9") .or. cCh == "-"
+        return ::scanNumber()
+    endif
+
+    ::nPos++
+    return ::makeToken("PUNCT", cCh)
+endmethod
+
+method scanName() as json class GqlLexer
+    local nStart := ::nPos as numeric
+    local cCh    := "" as character
+
+    while ::nPos <= ::nLen
+        cCh := substr(::cSource, ::nPos, 1)
+        if (cCh >= "a" .and. cCh <= "z") .or. (cCh >= "A" .and. cCh <= "Z") .or. (cCh >= "0" .and. cCh <= "9") .or. cCh == "_"
+            ::nPos++
+        else
+            exit
+        endif
+    enddo
+
+    return ::makeToken("NAME", substr(::cSource, nStart, ::nPos - nStart))
+endmethod
+
+method scanString() as json class GqlLexer
+    local cResult := "" as character
+    local cCh     := "" as character
+
+    ::nPos++ // opening quote
+    while ::nPos <= ::nLen
+        cCh := substr(::cSource, ::nPos, 1)
+        if cCh == "\""
+            ::nPos++
+            return ::makeToken("STRING", cResult)
+        elseif cCh == "\\"
+            ::nPos++
             cCh := substr(::cSource, ::nPos, 1)
-            if (cCh >= "a" .and. cCh <= "z") .or. (cCh >= "A" .and. cCh <= "Z") .or. (cCh >= "0" .and. cCh <= "9") .or. cCh == "_"
-                ::nPos++
-            else
-                exit
-            endif
-        enddo
-
-        return ::makeToken("NAME", substr(::cSource, nStart, ::nPos - nStart))
-    endmethod
-
-    method scanString() as json class GqlLexer
-        local cResult := "" as character
-        local cCh     := "" as character
-
-        ::nPos++ // opening quote
-        while ::nPos <= ::nLen
-            cCh := substr(::cSource, ::nPos, 1)
-            if cCh == "\""
-                ::nPos++
-                return ::makeToken("STRING", cResult)
-            elseif cCh == "\\"
-                ::nPos++
-                cCh := substr(::cSource, ::nPos, 1)
-                if cCh == "n"
-                    cResult += chr(10)
-                elseif cCh == "t"
-                    cResult += chr(9)
-                else
-                    cResult += cCh
-                endif
-                ::nPos++
+            if cCh == "n"
+                cResult += chr(10)
+            elseif cCh == "t"
+                cResult += chr(9)
             else
                 cResult += cCh
-                ::nPos++
             endif
-        enddo
-
-        return ::makeToken("STRING", cResult) // unterminated: parser reports the error
-    endmethod
-
-    method scanNumber() as json class GqlLexer
-        local nStart  := ::nPos as numeric
-        local lFloat  := .F.     as logical
-        local cCh     := ""       as character
-
-        if substr(::cSource, ::nPos, 1) == "-"
+            ::nPos++
+        else
+            cResult += cCh
             ::nPos++
         endif
-        while ::nPos <= ::nLen
-            cCh := substr(::cSource, ::nPos, 1)
-            if cCh >= "0" .and. cCh <= "9"
-                ::nPos++
-            elseif cCh == "." .and. !lFloat
-                lFloat := .T.
-                ::nPos++
-            else
-                exit
-            endif
-        enddo
+    enddo
 
-        return ::makeToken(iif(lFloat, "FLOAT", "INT"), substr(::cSource, nStart, ::nPos - nStart))
-    endmethod
+    return ::makeToken("STRING", cResult) // unterminated: parser reports the error
+endmethod
 
-    method makeToken(cKind as character, cValue as character) as json class GqlLexer
-        local oTok := JsonParse("{}") as json
-        JsonSet(oTok, "kind", cKind)
-        JsonSet(oTok, "value", cValue)
-        return oTok
-    endmethod
+method scanNumber() as json class GqlLexer
+    local nStart  := ::nPos as numeric
+    local lFloat  := .F.     as logical
+    local cCh     := ""       as character
+    local cKind   := "INT"     as character
+
+    if substr(::cSource, ::nPos, 1) == "-"
+        ::nPos++
+    endif
+    while ::nPos <= ::nLen
+        cCh := substr(::cSource, ::nPos, 1)
+        if cCh >= "0" .and. cCh <= "9"
+            ::nPos++
+        elseif cCh == "." .and. !lFloat
+            lFloat := .T.
+            ::nPos++
+        else
+            exit
+        endif
+    enddo
+
+    if lFloat
+        cKind := "FLOAT"
+    endif
+
+    return ::makeToken(cKind, substr(::cSource, nStart, ::nPos - nStart))
+endmethod
+
+method makeToken(cKind as character, cValue as character) as json class GqlLexer
+    local oTok := JsonParse("{}") as json
+    JsonSet(oTok, "kind", cKind)
+    JsonSet(oTok, "value", cValue)
+    return oTok
+endmethod
 
 endnamespace
 ```
@@ -1231,7 +1320,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Create: `custom/backoffice/graphql/core/parser.tlpp`
 
 **Interfaces:**
-- Consumes: `GqlLexer():new/next/peek` (Task 5).
+- Consumes: `GqlLexer():new/nextToken/peek` (Task 5).
 - Produces:
   - `GqlParser():new(cSource as character) as object`
   - `GqlParser():parse() as json` — returns `{kind:"Document", definitions:[...]}` AST, or `nil` if there were errors
@@ -1249,7 +1338,6 @@ AST shapes produced (consumed by Task 7/8):
 ```tlpp
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "lexer.tlpp"
 
 namespace custom.backoffice.graphql
 
@@ -1264,17 +1352,30 @@ class GqlParser
     private data oLexer  as object
     private data aErrors as array
 
-    method new(cSource as character) as object class GqlParser
-        ::oLexer  := GqlLexer():new(cSource)
-        ::aErrors := {}
-        return self
-    endmethod
+    public method new(cSource as character) as object
+    public method getErrors() as array
+    public method parse() as json
+    method parseOperation() as json
+    method parseSelectionSet() as array
+    method parseField() as json
+    method parseArguments() as json
+    method parseValue() as json
+    method parseValueList() as array
+    method parseObjectValue() as json
+    method expectPunct(cExpected as character) as logical
+endclass
 
-    method getErrors() as array class GqlParser
-        return ::aErrors
-    endmethod
+method new(cSource as character) as object class GqlParser
+    ::oLexer  := GqlLexer():new(cSource)
+    ::aErrors := {}
+    return self
+endmethod
 
-    method parse() as json class GqlParser
+method getErrors() as array class GqlParser
+    return ::aErrors
+endmethod
+
+method parse() as json class GqlParser
         local aDefs := {} as array
         local oDoc  as json
 
@@ -1298,10 +1399,10 @@ class GqlParser
 
         if oTok["kind"] == "NAME" .and. (oTok["value"] == "query" .or. oTok["value"] == "mutation")
             cOp := oTok["value"]
-            ::oLexer:next()
+            ::oLexer:nextToken()
             oTok := ::oLexer:peek()
             if oTok["kind"] == "NAME"
-                ::oLexer:next() // optional operation name, discarded (not needed by the executor)
+                ::oLexer:nextToken() // optional operation name, discarded (not needed by the executor)
             endif
         endif
 
@@ -1331,7 +1432,7 @@ class GqlParser
     endmethod
 
     method parseField() as json class GqlParser
-        local oTok    := ::oLexer:next() as json
+        local oTok    := ::oLexer:nextToken() as json
         local cName1  := "" as character
         local cAlias  := "" as character
         local oField  as json
@@ -1345,8 +1446,8 @@ class GqlParser
         cAlias := cName1
 
         if ::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == ":"
-            ::oLexer:next()
-            oTok := ::oLexer:next()
+            ::oLexer:nextToken()
+            oTok := ::oLexer:nextToken()
             cAlias := cName1
             cName1 := oTok["value"]
         endif
@@ -1381,7 +1482,7 @@ class GqlParser
 
         ::expectPunct("(")
         while ::oLexer:peek()["kind"] != "EOF" .and. !(::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == ")")
-            oTok := ::oLexer:next()
+            oTok := ::oLexer:nextToken()
             if oTok["kind"] != "NAME"
                 aAdd(::aErrors, "Expected argument name, found '" + oTok["value"] + "'")
                 return oArgs
@@ -1401,7 +1502,7 @@ class GqlParser
     endmethod
 
     method parseValue() as json class GqlParser
-        local oTok := ::oLexer:next() as json
+        local oTok := ::oLexer:nextToken() as json
         local oVal as json
 
         oVal := JsonParse("{}")
@@ -1454,7 +1555,7 @@ class GqlParser
         local oTok  as json
 
         while ::oLexer:peek()["kind"] != "EOF" .and. !(::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == "}")
-            oTok := ::oLexer:next()
+            oTok := ::oLexer:nextToken()
             if oTok["kind"] != "NAME"
                 aAdd(::aErrors, "Expected field name in object value, found '" + oTok["value"] + "'")
                 return oObj
@@ -1474,7 +1575,7 @@ class GqlParser
     endmethod
 
     method expectPunct(cExpected as character) as logical class GqlParser
-        local oTok := ::oLexer:next() as json
+        local oTok := ::oLexer:nextToken() as json
         if oTok["kind"] != "PUNCT" .or. oTok["value"] != cExpected
             aAdd(::aErrors, "Expected '" + cExpected + "' but found '" + oTok["value"] + "'")
             return .F.
@@ -1533,19 +1634,28 @@ namespace custom.backoffice.graphql
 class GqlValidator
     private data oSchemaProvider as object
 
-    method new(oSchemaProvider as object) as object class GqlValidator
-        ::oSchemaProvider := oSchemaProvider
-        return self
-    endmethod
+    public method new(oSchemaProvider as object) as object
+    public method validate(oDocument as json) as array
+    method validateRootField(oField as json, aErrors as array) as object
+    method validateSelection(oType as json, aSelection as array, aErrors as array) as object
+    method fieldExistsOnType(oType as json, cField as character) as logical
+    method relationTargetType(oType as json, cField as character) as json
+    method validateArguments(oType as json, oArgs as json, aErrors as array) as object
+endclass
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param oDocument JSON - Document AST from GqlParser:parse()
-    @return Array - error messages, empty if the document is valid
-    /@*/
-    method validate(oDocument as json) as array class GqlValidator
+method new(oSchemaProvider as object) as object class GqlValidator
+    ::oSchemaProvider := oSchemaProvider
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param oDocument JSON - Document AST from GqlParser:parse()
+@return Array - error messages, empty if the document is valid
+/@*/
+method validate(oDocument as json) as array class GqlValidator
         local aErrors := {} as array
         local aDefs   := oDocument["definitions"] as array
         local nI      := 0 as numeric
@@ -1562,14 +1672,14 @@ class GqlValidator
         return aErrors
     endmethod
 
-    method validateRootField(oField as json, aErrors as array) class GqlValidator
+    method validateRootField(oField as json, aErrors as array) as object class GqlValidator
         local cTable := oField["name"] as character
         local oType  := ::oSchemaProvider:getType(cTable) as json
         local aSubSel as array
 
         if oType == nil
             aAdd(aErrors, "Unknown or restricted table: '" + cTable + "'")
-            return
+            return self
         endif
 
         ::validateArguments(oType, oField["arguments"], aErrors)
@@ -1577,12 +1687,13 @@ class GqlValidator
         aSubSel := oField["selectionSet"]
         if aSubSel == nil
             aAdd(aErrors, "Field '" + cTable + "' requires a selection of sub-fields")
-            return
+            return self
         endif
         ::validateSelection(oType, aSubSel, aErrors)
+        return self
     endmethod
 
-    method validateSelection(oType as json, aSelection as array, aErrors as array) class GqlValidator
+    method validateSelection(oType as json, aSelection as array, aErrors as array) as object class GqlValidator
         local nI       := 0 as numeric
         local oField   as json
         local cName    as character
@@ -1608,6 +1719,7 @@ class GqlValidator
 
             aAdd(aErrors, "Unknown field '" + cName + "' on type '" + oType["name"] + "'")
         next nI
+        return self
     endmethod
 
     method fieldExistsOnType(oType as json, cField as character) as logical class GqlValidator
@@ -1634,18 +1746,18 @@ class GqlValidator
         return nil
     endmethod
 
-    method validateArguments(oType as json, oArgs as json, aErrors as array) class GqlValidator
+    method validateArguments(oType as json, oArgs as json, aErrors as array) as object class GqlValidator
         local aFilters := oArgs["filter"] as array
         local nI       := 0 as numeric
         local oFilter   as json
         local aValidOps := {"eq", "gt", "gte", "lt", "lte"} as array
 
         if aFilters == nil
-            return
+            return self
         endif
         if valtype(aFilters) != "A"
             aAdd(aErrors, "Argument 'filter' must be a list")
-            return
+            return self
         endif
 
         for nI := 1 to len(aFilters)
@@ -1661,6 +1773,7 @@ class GqlValidator
                 aAdd(aErrors, "Unsupported filter operator '" + oFilter["op"]["value"] + "'")
             endif
         next nI
+        return self
     endmethod
 
 endnamespace
@@ -1699,40 +1812,49 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Add `getOrderKey` to `core/dictionary-reader.tlpp`**
 
+Add the declaration to the existing `class GqlDictionaryReader ... endclass` block:
+
 ```tlpp
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias
-    @return Character - comma-joined key field list from SIX order 1;
-            falls back to the first scalar field of the table if no SIX
-            row exists for order 1.
-    /@*/
-    method getOrderKey(cTable as character) as character class GqlDictionaryReader
-        local cAlq   := GetNextAlias() as character
-        local cQuery := "SELECT X6_CHAVE AS RKEY FROM " + RetSqlName("SIX") + ;
-                         " WHERE D_E_L_E_T_ = ' ' AND X6_ARQUIVO = '" + cTable + "' AND X6_ORDEM = '1'" as character
-        local cKey   := "" as character
-        local aFields as array
+    public method getOrderKey(cTable as character) as character
+```
 
-        FWExecStatement(cAlq, ChangeQuery(cQuery))
-        (cAlq)->(dbGoTop())
-        if !(cAlq)->(Eof())
-            cKey := alltrim((cAlq)->RKEY)
-        endif
-        (cAlq)->(dbCloseArea())
+Then add the implementation below the class's other implementations (after
+`getRelations`'s `endmethod`, before `endnamespace`):
 
-        if !empty(cKey)
-            return cKey
-        endif
+```tlpp
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@return Character - comma-joined key field list from SIX order 1;
+        falls back to the first scalar field of the table if no SIX
+        row exists for order 1.
+/@*/
+method getOrderKey(cTable as character) as character class GqlDictionaryReader
+    local cAlq   := GetNextAlias() as character
+    local cQuery := "SELECT X6_CHAVE AS RKEY FROM " + RetSqlName("SIX") + ;
+                     " WHERE D_E_L_E_T_ = ' ' AND X6_ARQUIVO = '" + cTable + "' AND X6_ORDEM = '1'" as character
+    local cKey   := "" as character
+    local aFields as array
 
-        aFields := ::getTableFields(cTable)
-        if len(aFields) > 0
-            return aFields[1]["name"]
-        endif
-        return ""
-    endmethod
+    FWExecStatement(cAlq, ChangeQuery(cQuery))
+    (cAlq)->(dbGoTop())
+    if !(cAlq)->(Eof())
+        cKey := alltrim((cAlq)->RKEY)
+    endif
+    (cAlq)->(dbCloseArea())
+
+    if !empty(cKey)
+        return cKey
+    endif
+
+    aFields := ::getTableFields(cTable)
+    if len(aFields) > 0
+        return aFields[1]["name"]
+    endif
+    return ""
+endmethod
 ```
 
 - [ ] **Step 2: Compile to verify no syntax errors**
@@ -1764,26 +1886,36 @@ namespace custom.backoffice.graphql
 class GqlQueryBuilder
     private data oConfig as object
 
-    method new(oConfig as object) as object class GqlQueryBuilder
-        ::oConfig := oConfig
-        return self
-    endmethod
+    public method new(oConfig as object) as object
+    public method build(cTable as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character, aExtraBinds as array) as json
+    method resolveLimit(oArgs as json) as numeric
+    method resolveOffset(oArgs as json) as numeric
+    method applyFilters(oArgs as json) as json
+    method opToSql(cOp as character) as character
+    method joinFields(aFields as array) as character
+    method joinWithAnd(aClauses as array) as character
+endclass
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias
-    @param aScalarFields Array - field names to select
-    @param oArgs JSON - parsed GraphQL arguments (limit, offset, filter)
-    @param cOrderKey Character - comma-joined ORDER BY field list
-    @param cExtraWhere Character - additional WHERE clause with '?' binds,
-           or "" (used by the executor to scope nested relationship
-           queries to the parent row's key)
-    @param aExtraBinds Array - bind values for cExtraWhere, in order
-    @return JSON - {sql: Character, binds: Array}
-    /@*/
-    method build(cTable as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character, aExtraBinds as array) as json class GqlQueryBuilder
+method new(oConfig as object) as object class GqlQueryBuilder
+    ::oConfig := oConfig
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@param aScalarFields Array - field names to select
+@param oArgs JSON - parsed GraphQL arguments (limit, offset, filter)
+@param cOrderKey Character - comma-joined ORDER BY field list
+@param cExtraWhere Character - additional WHERE clause with '?' binds,
+       or "" (used by the executor to scope nested relationship
+       queries to the parent row's key)
+@param aExtraBinds Array - bind values for cExtraWhere, in order
+@return JSON - {sql: Character, binds: Array}
+/@*/
+method build(cTable as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character, aExtraBinds as array) as json class GqlQueryBuilder
         local nLimit   := ::resolveLimit(oArgs) as numeric
         local nOffset  := ::resolveOffset(oArgs) as numeric
         local cWhere   := "D_E_L_E_T_ = ' ' AND " + cTable + "_FILIAL = ?" as character
@@ -2067,10 +2199,6 @@ Expected: FAIL — every real query returns `{"errors":[{"message":"query execut
 ```tlpp
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "parser.tlpp"
-#include "validator.tlpp"
-#include "query-builder.tlpp"
-#include "errors.tlpp"
 
 namespace custom.backoffice.graphql
 
@@ -2086,21 +2214,30 @@ class GqlExecutor
     private data oDictionaryReader  as object
     private data oQueryBuilder      as object
 
-    method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object class GqlExecutor
-        ::oSchemaProvider   := oSchemaProvider
-        ::oDictionaryReader := oDictionaryReader
-        ::oQueryBuilder     := oQueryBuilder
-        return self
-    endmethod
+    public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object
+    public method execute(cQuerySource as character) as json
+    method resolveTableField(oField as json, cExtraWhere as character, aExtraBinds as array) as array
+    method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array
+    method isScalarField(oType as json, cName as character) as logical
+    method fieldNames(aSelection as array) as array
+    method fieldAlias(oField as json) as character
+endclass
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cQuerySource Character - raw GraphQL query text
-    @return JSON - {"data": {...}} on success, {"errors": [...]} on failure
-    /@*/
-    method execute(cQuerySource as character) as json class GqlExecutor
+method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object class GqlExecutor
+    ::oSchemaProvider   := oSchemaProvider
+    ::oDictionaryReader := oDictionaryReader
+    ::oQueryBuilder     := oQueryBuilder
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cQuerySource Character - raw GraphQL query text
+@return JSON - {"data": {...}} on success, {"errors": [...]} on failure
+/@*/
+method execute(cQuerySource as character) as json class GqlExecutor
         local oParser    := GqlParser():new(cQuerySource) as object
         local oValidator := GqlValidator():new(::oSchemaProvider) as object
         local oDoc       as json
@@ -2110,6 +2247,7 @@ class GqlExecutor
         local oData      as json
         local nI         := 0 as numeric
         local nJ         := 0 as numeric
+        local oResult    as json
 
         oDoc := oParser:parse()
         if oDoc == nil
@@ -2130,7 +2268,7 @@ class GqlExecutor
             next nJ
         next nI
 
-        local oResult := JsonParse("{}")
+        oResult := JsonParse("{}")
         JsonSet(oResult, "data", oData)
         return oResult
     endmethod
@@ -2253,7 +2391,20 @@ Expected: compile succeeds.
 
 - [ ] **Step 5: Wire the executor into the entry point**
 
-In `entrypoints/service.entrypoint.tlpp`, add `#include "../core/executor.tlpp"` and replace:
+In `entrypoints/service.entrypoint.tlpp`, no include is needed for
+`GqlExecutor` — see the Global Constraints note on cross-file `#include`.
+
+This project's `Local`/`Private` declarations must all sit at the top of
+the function, before any executable statement (never mid-flow, per this
+project's TLPP conventions — a `local` inside an `if` block is a compile
+error, C2051 "LOCAL declaration follows executable statement"). Add
+`oExecutor` to the existing top-of-function `local` block:
+```tlpp
+    local oExecutor  as object
+```
+(alongside `oConfig`, `oAccess`, `oDict`, `oSchema`, `cQuery`, `cTypeName`, `oResult`, `cJsonOut`).
+
+Then replace:
 ```tlpp
     if !empty(cQuery)
         // Wired in Task 9 (full parse/validate/execute pipeline).
@@ -2262,7 +2413,7 @@ In `entrypoints/service.entrypoint.tlpp`, add `#include "../core/executor.tlpp"`
 with:
 ```tlpp
     if !empty(cQuery)
-        local oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig)) as object
+        oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig))
         oResult := oExecutor:execute(cQuery)
 ```
 
