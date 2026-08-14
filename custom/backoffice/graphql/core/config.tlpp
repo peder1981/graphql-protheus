@@ -45,8 +45,8 @@ method new() as object class GqlConfig
         return self
     endif
 
-    oJson := JsonParse(cRaw)
-    if valtype(oJson) != "J"
+    oJson := JsonObject():New()
+    if oJson:FromJson(cRaw) > 0
         FWLogMsg("GqlConfig: " + cPath + " is not valid JSON, using built-in defaults", .F.)
         return self
     endif
