@@ -1,0 +1,139 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.1.0
+@desc GqlMutationBuilder - turns a table name, the real branch field name,
+      a validated input object and a field-name list into ready-to-run SQL
+      text for INSERT/UPDATE (soft-delete uses UPDATE too). The branch
+      field is always forced to cFilAnt - never read from oInput - exactly
+      like GqlQueryBuilder does for reads. Every value goes through
+      GqlQueryBuilder():EscapeValue(cValToChar(...)) before reaching SQL
+      text - never raw concatenation of client-supplied values.
+/@*/
+class GqlMutationBuilder
+    public method new() as object
+    public method buildInsert(cTable as character, cFilialField as character, oInput as json, aFieldNames as array) as character
+    public method buildUpdate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, aSetFields as array) as character
+    public method buildSoftDelete(cTable as character, cFilialField as character, oInput as json, aKeyFields as array) as character
+    method escapedValue(uValue as variant) as character
+    method keyWhere(oInput as json, aKeyFields as array) as character
+endclass
+
+method new() as object class GqlMutationBuilder
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cTable Character - table alias
+@param cFilialField Character - real branch field name for cTable, or ""
+       if the table has none
+@param oInput JSON - validated create input
+@param aFieldNames Array - field names to insert, from oInput's keys
+       (the caller already filtered this to known/allowed fields)
+@return Character - full INSERT statement text
+/@*/
+method buildInsert(cTable as character, cFilialField as character, oInput as json, aFieldNames as array) as character class GqlMutationBuilder
+    local cCols   := "" as character
+    local cVals   := "" as character
+    local nI      := 0 as numeric
+
+    for nI := 1 to len(aFieldNames)
+        if nI > 1
+            cCols += ", "
+            cVals += ", "
+        endif
+        cCols += aFieldNames[nI]
+        cVals += "'" + ::escapedValue(oInput[aFieldNames[nI]]) + "'"
+    next nI
+
+    if !empty(cFilialField)
+        cCols += ", " + cFilialField
+        cVals += ", '" + GqlQueryBuilder():EscapeValue(cFilAnt) + "'"
+    endif
+
+    return "INSERT INTO " + RetSqlName(cTable) + " (" + cCols + ") VALUES (" + cVals + ")"
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cTable Character - table alias
+@param cFilialField Character - real branch field name, or ""
+@param oInput JSON - validated update input (key fields + fields to change)
+@param aKeyFields Array - field names identifying the row (WHERE)
+@param aSetFields Array - field names to change (SET) - never includes any
+       of aKeyFields
+@return Character - full UPDATE statement text, scoped by key + filial +
+        D_E_L_E_T_ = ' '
+/@*/
+method buildUpdate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, aSetFields as array) as character class GqlMutationBuilder
+    local cSet := "" as character
+    local nI   := 0 as numeric
+    local cWhere := "D_E_L_E_T_ = ' '" as character
+
+    for nI := 1 to len(aSetFields)
+        if nI > 1
+            cSet += ", "
+        endif
+        cSet += aSetFields[nI] + " = '" + ::escapedValue(oInput[aSetFields[nI]]) + "'"
+    next nI
+
+    cWhere += " AND " + ::keyWhere(oInput, aKeyFields)
+    if !empty(cFilialField)
+        cWhere += " AND " + cFilialField + " = '" + GqlQueryBuilder():EscapeValue(cFilAnt) + "'"
+    endif
+
+    return "UPDATE " + RetSqlName(cTable) + " SET " + cSet + " WHERE " + cWhere
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cTable Character - table alias
+@param cFilialField Character - real branch field name, or ""
+@param oInput JSON - delete input (key fields only)
+@param aKeyFields Array - field names identifying the row (WHERE)
+@return Character - UPDATE statement text setting D_E_L_E_T_ = '*',
+        scoped by key + filial + D_E_L_E_T_ = ' ' (never touches an
+        already-deleted row)
+/@*/
+method buildSoftDelete(cTable as character, cFilialField as character, oInput as json, aKeyFields as array) as character class GqlMutationBuilder
+    local cWhere := "D_E_L_E_T_ = ' '" as character
+
+    cWhere += " AND " + ::keyWhere(oInput, aKeyFields)
+    if !empty(cFilialField)
+        cWhere += " AND " + cFilialField + " = '" + GqlQueryBuilder():EscapeValue(cFilAnt) + "'"
+    endif
+
+    return "UPDATE " + RetSqlName(cTable) + " SET D_E_L_E_T_ = '*' WHERE " + cWhere
+endmethod
+
+method escapedValue(uValue as variant) as character class GqlMutationBuilder
+    return GqlQueryBuilder():EscapeValue(cValToChar(uValue))
+endmethod
+
+method keyWhere(oInput as json, aKeyFields as array) as character class GqlMutationBuilder
+    local cResult := "" as character
+    local nI      := 0 as numeric
+
+    for nI := 1 to len(aKeyFields)
+        if nI > 1
+            cResult += " AND "
+        endif
+        cResult += aKeyFields[nI] + " = '" + ::escapedValue(oInput[aKeyFields[nI]]) + "'"
+    next nI
+
+    return cResult
+endmethod
+
+endnamespace
