@@ -17,138 +17,148 @@ class GqlConfig
     private data nMaxPageSize        as numeric
     private data nSchemaCacheTtlSecs as numeric
 
-    method new() as object class GqlConfig
-        local cPath    := "custom/backoffice/graphql/config/graphql-config.json" as character
-        local cRaw     := "" as character
-        local oJson    as json
-        local oPag     as json
+    public method new() as object
+    public method getDenyTables() as array
+    public method getDenyFields() as array
+    public method getDefaultPageSize() as numeric
+    public method getMaxPageSize() as numeric
+    public method getSchemaCacheTtlSeconds() as numeric
+    static method MatchWildcard(cPattern as character, cValue as character) as logical
+    static method SplitOnStar(cPattern as character) as array
+endclass
 
-        ::aDenyTables         := {}
-        ::aDenyFields         := {}
-        ::nDefaultPageSize    := 20
-        ::nMaxPageSize        := 200
-        ::nSchemaCacheTtlSecs := 3600
+method new() as object class GqlConfig
+    local cPath    := "custom/backoffice/graphql/config/graphql-config.json" as character
+    local cRaw     := "" as character
+    local oJson    as json
+    local oPag     as json
 
-        cRaw := MemoRead(cPath)
-        if empty(cRaw)
-            FWLogMsg("GqlConfig: " + cPath + " not found or empty, using built-in defaults", .F.)
-            return self
-        endif
+    ::aDenyTables         := {}
+    ::aDenyFields         := {}
+    ::nDefaultPageSize    := 20
+    ::nMaxPageSize        := 200
+    ::nSchemaCacheTtlSecs := 3600
 
-        oJson := JsonParse(cRaw)
-        if valtype(oJson) != "J"
-            FWLogMsg("GqlConfig: " + cPath + " is not valid JSON, using built-in defaults", .F.)
-            return self
-        endif
-
-        if oJson["denyTables"] != nil
-            ::aDenyTables := oJson["denyTables"]
-        endif
-        if oJson["denyFields"] != nil
-            ::aDenyFields := oJson["denyFields"]
-        endif
-        if oJson["schemaCacheTtlSeconds"] != nil
-            ::nSchemaCacheTtlSecs := oJson["schemaCacheTtlSeconds"]
-        endif
-
-        oPag := oJson["pagination"]
-        if oPag != nil
-            if oPag["defaultPageSize"] != nil
-                ::nDefaultPageSize := oPag["defaultPageSize"]
-            endif
-            if oPag["maxPageSize"] != nil
-                ::nMaxPageSize := oPag["maxPageSize"]
-            endif
-        endif
-
+    cRaw := MemoRead(cPath)
+    if empty(cRaw)
+        FWLogMsg("GqlConfig: " + cPath + " not found or empty, using built-in defaults", .F.)
         return self
-    endmethod
+    endif
 
-    method getDenyTables() as array class GqlConfig
-        return ::aDenyTables
-    endmethod
+    oJson := JsonParse(cRaw)
+    if valtype(oJson) != "J"
+        FWLogMsg("GqlConfig: " + cPath + " is not valid JSON, using built-in defaults", .F.)
+        return self
+    endif
 
-    method getDenyFields() as array class GqlConfig
-        return ::aDenyFields
-    endmethod
+    if oJson["denyTables"] != nil
+        ::aDenyTables := oJson["denyTables"]
+    endif
+    if oJson["denyFields"] != nil
+        ::aDenyFields := oJson["denyFields"]
+    endif
+    if oJson["schemaCacheTtlSeconds"] != nil
+        ::nSchemaCacheTtlSecs := oJson["schemaCacheTtlSeconds"]
+    endif
 
-    method getDefaultPageSize() as numeric class GqlConfig
-        return ::nDefaultPageSize
-    endmethod
-
-    method getMaxPageSize() as numeric class GqlConfig
-        return ::nMaxPageSize
-    endmethod
-
-    method getSchemaCacheTtlSeconds() as numeric class GqlConfig
-        return ::nSchemaCacheTtlSecs
-    endmethod
-
-    /*/{Protheus.doc}
-    @type Static Function
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cPattern Character - wildcard pattern, "*" matches any run of characters
-    @param cValue Character - value to test
-    @return Logical - .T. if cValue matches cPattern
-    /@*/
-    static method MatchWildcard(cPattern as character, cValue as character) as logical class GqlConfig
-        local cUpValue   := upper(alltrim(cValue))   as character
-        local cUpPattern := upper(alltrim(cPattern)) as character
-        local aParts     := {}                        as array
-        local cPart      := ""                         as character
-        local nI         := 0                           as numeric
-        local nSearchFrom := 1                            as numeric
-        local nFoundAt    := 0                             as numeric
-        local lStartsWithStar := (left(cUpPattern, 1) == "*") as logical
-        local lEndsWithStar   := (right(cUpPattern, 1) == "*") as logical
-
-        if !("*" $ cUpPattern)
-            return cUpValue == cUpPattern
+    oPag := oJson["pagination"]
+    if oPag != nil
+        if oPag["defaultPageSize"] != nil
+            ::nDefaultPageSize := oPag["defaultPageSize"]
         endif
+        if oPag["maxPageSize"] != nil
+            ::nMaxPageSize := oPag["maxPageSize"]
+        endif
+    endif
 
-        aParts := GqlConfig():SplitOnStar(cUpPattern)
+    return self
+endmethod
 
-        for nI := 1 to len(aParts)
-            cPart := aParts[nI]
-            if empty(cPart)
-                loop
-            endif
-            nFoundAt := at(cPart, substr(cUpValue, nSearchFrom))
-            if nFoundAt == 0
-                return .F.
-            endif
-            if nI == 1 .and. !lStartsWithStar .and. nFoundAt != 1
-                return .F.
-            endif
-            nSearchFrom += (nFoundAt - 1) + len(cPart)
-        next nI
+method getDenyTables() as array class GqlConfig
+    return ::aDenyTables
+endmethod
 
-        if !lEndsWithStar .and. nSearchFrom - 1 != len(cUpValue)
+method getDenyFields() as array class GqlConfig
+    return ::aDenyFields
+endmethod
+
+method getDefaultPageSize() as numeric class GqlConfig
+    return ::nDefaultPageSize
+endmethod
+
+method getMaxPageSize() as numeric class GqlConfig
+    return ::nMaxPageSize
+endmethod
+
+method getSchemaCacheTtlSeconds() as numeric class GqlConfig
+    return ::nSchemaCacheTtlSecs
+endmethod
+
+/*/{Protheus.doc}
+@type Static Function
+@author GraphQL Engine Team
+@since 3.0.0
+@param cPattern Character - wildcard pattern, "*" matches any run of characters
+@param cValue Character - value to test
+@return Logical - .T. if cValue matches cPattern
+/@*/
+method MatchWildcard(cPattern as character, cValue as character) as logical class GqlConfig
+    local cUpValue   := upper(alltrim(cValue))   as character
+    local cUpPattern := upper(alltrim(cPattern)) as character
+    local aParts     := {}                        as array
+    local cPart      := ""                         as character
+    local nI         := 0                           as numeric
+    local nSearchFrom := 1                            as numeric
+    local nFoundAt    := 0                             as numeric
+    local lStartsWithStar := (left(cUpPattern, 1) == "*") as logical
+    local lEndsWithStar   := (right(cUpPattern, 1) == "*") as logical
+
+    if !("*" $ cUpPattern)
+        return cUpValue == cUpPattern
+    endif
+
+    aParts := GqlConfig():SplitOnStar(cUpPattern)
+
+    for nI := 1 to len(aParts)
+        cPart := aParts[nI]
+        if empty(cPart)
+            loop
+        endif
+        nFoundAt := at(cPart, substr(cUpValue, nSearchFrom))
+        if nFoundAt == 0
             return .F.
         endif
+        if nI == 1 .and. !lStartsWithStar .and. nFoundAt != 1
+            return .F.
+        endif
+        nSearchFrom += (nFoundAt - 1) + len(cPart)
+    next nI
 
-        return .T.
-    endmethod
+    if !lEndsWithStar .and. nSearchFrom - 1 != len(cUpValue)
+        return .F.
+    endif
 
-    static method SplitOnStar(cPattern as character) as array class GqlConfig
-        local aResult := {}          as array
-        local cAccum  := ""           as character
-        local nI      := 0             as numeric
-        local cCh     := ""              as character
+    return .T.
+endmethod
 
-        for nI := 1 to len(cPattern)
-            cCh := substr(cPattern, nI, 1)
-            if cCh == "*"
-                aAdd(aResult, cAccum)
-                cAccum := ""
-            else
-                cAccum += cCh
-            endif
-        next nI
-        aAdd(aResult, cAccum)
+method SplitOnStar(cPattern as character) as array class GqlConfig
+    local aResult := {}          as array
+    local cAccum  := ""           as character
+    local nI      := 0             as numeric
+    local cCh     := ""              as character
 
-        return aResult
-    endmethod
+    for nI := 1 to len(cPattern)
+        cCh := substr(cPattern, nI, 1)
+        if cCh == "*"
+            aAdd(aResult, cAccum)
+            cAccum := ""
+        else
+            cAccum += cCh
+        endif
+    next nI
+    aAdd(aResult, cAccum)
+
+    return aResult
+endmethod
 
 endnamespace

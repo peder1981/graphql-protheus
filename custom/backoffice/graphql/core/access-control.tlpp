@@ -1,6 +1,5 @@
 #include "tlpp-core.th"
 #include "totvs.ch"
-#include "config.tlpp"
 
 namespace custom.backoffice.graphql
 
@@ -14,65 +13,71 @@ namespace custom.backoffice.graphql
 class GqlAccessControl
     private data oConfig as object
 
-    method new(oConfig as object) as object class GqlAccessControl
-        ::oConfig := oConfig
-        return self
-    endmethod
+    public method new(oConfig as object) as object
+    public method isTableAllowed(cTable as character) as logical
+    public method isFieldAllowed(cTable as character, cField as character) as logical
+    public method allowField(cTable as character, cField as character, oUserContext as object) as logical
+endclass
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias, e.g. "SA1"
-    @return Logical - .T. unless cTable matches a denyTables pattern
-    /@*/
-    method isTableAllowed(cTable as character) as logical class GqlAccessControl
-        local aDeny := ::oConfig:getDenyTables()
-        local nI    := 0 as numeric
+method new(oConfig as object) as object class GqlAccessControl
+    ::oConfig := oConfig
+    return self
+endmethod
 
-        for nI := 1 to len(aDeny)
-            if GqlConfig():MatchWildcard(aDeny[nI], cTable)
-                return .F.
-            endif
-        next nI
-        return .T.
-    endmethod
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Logical - .T. unless cTable matches a denyTables pattern
+/@*/
+method isTableAllowed(cTable as character) as logical class GqlAccessControl
+    local aDeny := ::oConfig:getDenyTables()
+    local nI    := 0 as numeric
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias
-    @param cField Character - field name, e.g. "A1_COD"
-    @return Logical - .T. unless cField matches a denyFields pattern
-    /@*/
-    method isFieldAllowed(cTable as character, cField as character) as logical class GqlAccessControl
-        local aDeny := ::oConfig:getDenyFields()
-        local nI    := 0 as numeric
+    for nI := 1 to len(aDeny)
+        if GqlConfig():MatchWildcard(aDeny[nI], cTable)
+            return .F.
+        endif
+    next nI
+    return .T.
+endmethod
 
-        for nI := 1 to len(aDeny)
-            if GqlConfig():MatchWildcard(aDeny[nI], cField)
-                return .F.
-            endif
-        next nI
-        return .T.
-    endmethod
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@param cField Character - field name, e.g. "A1_COD"
+@return Logical - .T. unless cField matches a denyFields pattern
+/@*/
+method isFieldAllowed(cTable as character, cField as character) as logical class GqlAccessControl
+    local aDeny := ::oConfig:getDenyFields()
+    local nI    := 0 as numeric
 
-    /*/{Protheus.doc}
-    @type Method
-    @author GraphQL Engine Team
-    @since 3.0.0
-    @param cTable Character - table alias
-    @param cField Character - field name
-    @param oUserContext Object - authenticated user context; nil until the
-           Auth sub-project wires real authentication in
-    @return Logical - always .T. in this sub-project (extension point only)
-    @desc Single call site for per-user permission checks. Do not inline
-          permission logic anywhere else — sub-project 3 (Auth) replaces
-          only this method body.
-    /@*/
-    method allowField(cTable as character, cField as character, oUserContext as object) as logical class GqlAccessControl
-        return .T.
-    endmethod
+    for nI := 1 to len(aDeny)
+        if GqlConfig():MatchWildcard(aDeny[nI], cField)
+            return .F.
+        endif
+    next nI
+    return .T.
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@param cField Character - field name
+@param oUserContext Object - authenticated user context; nil until the
+       Auth sub-project wires real authentication in
+@return Logical - always .T. in this sub-project (extension point only)
+@desc Single call site for per-user permission checks. Do not inline
+      permission logic anywhere else — sub-project 3 (Auth) replaces
+      only this method body.
+/@*/
+method allowField(cTable as character, cField as character, oUserContext as object) as logical class GqlAccessControl
+    return .T.
+endmethod
 
 endnamespace
