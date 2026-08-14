@@ -125,7 +125,7 @@ method applyFilters(oArgs as json) as character class GqlQueryBuilder
         oFilter := aFilters[nI]["value"]
         cOp     := oFilter["op"]["value"]
         cSqlOp  := ::opToSql(cOp)
-        aAdd(aClauses, oFilter["field"]["value"] + " " + cSqlOp + " '" + GqlQueryBuilder():EscapeValue(oFilter["value"]["value"]) + "'")
+        aAdd(aClauses, oFilter["field"]["value"] + " " + cSqlOp + " '" + GqlQueryBuilder():EscapeValue(cValToChar(oFilter["value"]["value"])) + "'")
     next nI
 
     for nI := 1 to len(aClauses)
