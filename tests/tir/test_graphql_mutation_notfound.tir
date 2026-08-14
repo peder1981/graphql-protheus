@@ -1,0 +1,29 @@
+"""
+TIR Test — GraphQL mutation not-found error handling
+"""
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLMutationNotFound:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_mutation_update_not_found(self):
+        gql = 'mutation { updateSA1(input: {A1_FILIAL: "01", A1_COD: "ZZNONE", A1_LOJA: "01", A1_NOME: "x"}) { A1_NOME } }'
+        result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql))
+        data = json.loads(result.text)
+        assert "errors" in data
+        assert "Row not found for update" in data["errors"][0]["message"]
+
+    def test_mutation_delete_not_found(self):
+        gql = 'mutation { deleteSA1(input: {A1_FILIAL: "01", A1_COD: "ZZNONE", A1_LOJA: "01"}) { A1_COD } }'
+        result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql))
+        data = json.loads(result.text)
+        assert "errors" in data
+        assert "Row not found for delete" in data["errors"][0]["message"]

@@ -1,0 +1,32 @@
+"""
+TIR Test — GraphQL delete mutation
+"""
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLMutationDelete:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_mutation_delete(self):
+        # Create test record
+        create_gql = 'mutation { createSA1(input: {A1_COD: "ZZ0003", A1_LOJA: "01", A1_NOME: "ToDelete"}) { A1_COD } }'
+        self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(create_gql))
+
+        # Delete the record — must include A1_FILIAL
+        delete_gql = 'mutation { deleteSA1(input: {A1_FILIAL: "01", A1_COD: "ZZ0003", A1_LOJA: "01"}) { A1_COD } }'
+        result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(delete_gql))
+        data = json.loads(result.text)
+        assert data["data"]["deleteSA1"]["A1_COD"] == "ZZ0003"
+
+        # Verify deletion via read query
+        verify_gql = '{ SA1(filter: [{field: "A1_COD", op: "eq", value: "ZZ0003"}]) { A1_COD } }'
+        verify_result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(verify_gql))
+        verify_data = json.loads(verify_result.text)
+        assert len(verify_data["data"]["SA1"]) == 0

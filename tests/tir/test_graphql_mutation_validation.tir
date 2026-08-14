@@ -1,0 +1,23 @@
+"""
+TIR Test — GraphQL mutation validation
+"""
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLMutationValidation:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_mutation_validation_max_length(self):
+        # A1_COD has maxLength of 6 — test exceeding it
+        gql = 'mutation { createSA1(input: {A1_COD: "TOOLONGVALUE", A1_LOJA: "01", A1_NOME: "x"}) { A1_COD } }'
+        result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql))
+        data = json.loads(result.text)
+        assert "errors" in data
+        assert "exceeds max length" in data["errors"][0]["message"]

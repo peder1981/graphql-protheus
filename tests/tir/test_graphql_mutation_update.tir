@@ -1,0 +1,33 @@
+"""
+TIR Test — GraphQL update mutation
+"""
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLMutationUpdate:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_mutation_update(self):
+        # Create test record
+        create_gql = 'mutation { createSA1(input: {A1_COD: "ZZ0002", A1_LOJA: "01", A1_NOME: "Before"}) { A1_COD } }'
+        self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(create_gql))
+
+        # Update the record — must include A1_FILIAL
+        update_gql = 'mutation { updateSA1(input: {A1_FILIAL: "01", A1_COD: "ZZ0002", A1_LOJA: "01", A1_NOME: "After"}) { A1_NOME } }'
+        result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(update_gql))
+        data = json.loads(result.text)
+        assert data["data"]["updateSA1"]["A1_NOME"] == "After"
+
+        # Verify update via read query
+        verify_gql = '{ SA1(filter: [{field: "A1_COD", op: "eq", value: "ZZ0002"}]) { A1_COD A1_NOME } }'
+        verify_result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(verify_gql))
+        verify_data = json.loads(verify_result.text)
+        assert verify_data["data"]["SA1"][0]["A1_NOME"] == "After"
+        assert verify_data["data"]["SA1"][0]["A1_COD"] == "ZZ0002"
