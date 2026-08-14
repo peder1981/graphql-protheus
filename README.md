@@ -19,6 +19,25 @@ running as a TLPP AppServer REST entry point.
 } }
 ```
 
+## Mutations
+
+`createTABLE`/`updateTABLE`/`deleteTABLE` are exposed only for tables
+listed in `config/graphql-config.json`'s `allowMutations` (empty by
+default — nothing is writable until an admin opts a table in). Delete is
+always soft (`D_E_L_E_T_ = '*'`), never a real row removal.
+
+```
+mutation { createSA1(input: {A1_COD: "000123", A1_LOJA: "01", A1_NOME: "Foo"}) {
+    A1_COD
+    A1_NOME
+} }
+```
+
+**Known limitation**: See `docs/architecture.md` for a concurrency caveat on `create` mutations.
+
+See `docs/architecture.md` and
+`docs/superpowers/specs/2026-08-14-graphql-mutations-design.md`.
+
 ## Configuration
 
 See `docs/configuration.md`. **`compile.sh`/`deploy-rpo.sh` only ever handle
@@ -41,6 +60,6 @@ against a running Protheus AppServer with this RPO deployed.
 
 ## Sub-project roadmap
 
-This is sub-project 1 of 6: Core Engine (this repo) → Mutations → Auth →
-Field Hooks → SDK Generator → Console PO-UI. See the design spec for the
+This is sub-projects 1-2 of 6: Core Engine + Mutations (this repo) → Auth →
+Field Hooks → SDK Generator → Console PO-UI. See the design specs for the
 full roadmap and how each later sub-project plugs into this engine.
