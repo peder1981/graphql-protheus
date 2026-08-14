@@ -1,0 +1,63 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.1.0
+@desc GqlMutationSchema - a table is a valid mutation target only if it is
+      BOTH in the allowMutations config list AND passes the read-path
+      deny-list (GqlSchemaProvider:getType() already returns nil for a
+      denied/unknown table) - never a mutation-only bypass of the deny-list.
+/@*/
+class GqlMutationSchema
+    private data oSchemaProvider as object
+    private data oConfig         as object
+
+    public method new(oSchemaProvider as object, oConfig as object) as object
+    public method isMutable(cTable as character) as logical
+    public method getMutationType(cTable as character) as json
+endclass
+
+method new(oSchemaProvider as object, oConfig as object) as object class GqlMutationSchema
+    ::oSchemaProvider := oSchemaProvider
+    ::oConfig         := oConfig
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cTable Character - table alias
+@return Logical - .T. only if cTable is in allowMutations AND the read
+        deny-list does not block it (GqlSchemaProvider:getType() != nil)
+/@*/
+method isMutable(cTable as character) as logical class GqlMutationSchema
+    local aAllow := ::oConfig:getAllowMutations() as array
+
+    if ascan(aAllow, {|c| c == cTable}) == 0
+        return .F.
+    endif
+
+    return ::oSchemaProvider:getType(cTable) != nil
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cTable Character - table alias
+@return JSON - same {name, fields, relations} shape as
+        GqlSchemaProvider:getType(), or nil if cTable is not mutable
+/@*/
+method getMutationType(cTable as character) as json class GqlMutationSchema
+    if !::isMutable(cTable)
+        return nil
+    endif
+    return ::oSchemaProvider:getType(cTable)
+endmethod
+
+endnamespace
