@@ -70,7 +70,7 @@ endmethod
 method getTableFields(cTable as character) as array class GqlDictionaryReader
     local aResult  := {} as array
     local cAlq     := GetNextAlias() as character
-    local cQuery   := "SELECT X3_CAMPO AS FCAMPO, X3_TIPO AS FTIPO, X3_DECIMAL AS FDECIMAL, X3_VISUAL AS FVISUAL" + ;
+    local cQuery   := "SELECT X3_CAMPO AS FCAMPO, X3_TIPO AS FTIPO, X3_DECIMAL AS FDECIMAL, X3_VISUAL AS FVISUAL, X3_TAMANHO AS FTAM, X3_OBRIGAT AS FOBRIG" + ;
                        " FROM " + RetSqlName("SX3") + ;
                        " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = '" + cTable + "' ORDER BY X3_ORDEM" as character
     local cField   := "" as character
@@ -89,6 +89,8 @@ method getTableFields(cTable as character) as array class GqlDictionaryReader
             oRow["name"] := cField
             oRow["sx3Type"] := alltrim((cAlq)->FTIPO)
             oRow["graphqlType"] := ::mapScalarType(alltrim((cAlq)->FTIPO), (cAlq)->FDECIMAL)
+            oRow["maxLength"] := (cAlq)->FTAM
+            oRow["required"] := alltrim((cAlq)->FOBRIG) == "S"
             aAdd(aResult, oRow)
         endif
         (cAlq)->(dbSkip())

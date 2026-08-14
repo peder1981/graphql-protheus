@@ -1,0 +1,110 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.1.0
+@desc GqlInputValidator - validates a mutation's input object against SX3
+      metadata (required/type/length) before any write happens.
+/@*/
+class GqlInputValidator
+    private data oDictionaryReader as object
+
+    public method new(oDictionaryReader as object) as object
+    public method validateCreate(cTable as character, oInput as json) as array
+    public method validateUpdate(cTable as character, oInput as json) as array
+    method validateField(oFieldMeta as json, uValue as variant, aErrors as array) as object
+endclass
+
+method new(oDictionaryReader as object) as object class GqlInputValidator
+    ::oDictionaryReader := oDictionaryReader
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cTable Character - table alias
+@param oInput JSON - parsed mutation input object (flat field map)
+@return Array - error messages, empty if valid. Every field returned by
+        GqlDictionaryReader:getTableFields() is checked: required fields
+        must be present, and any present field's type/length is validated.
+/@*/
+method validateCreate(cTable as character, oInput as json) as array class GqlInputValidator
+    local aFields := ::oDictionaryReader:getTableFields(cTable) as array
+    local aErrors := {} as array
+    local nI      := 0 as numeric
+    local uValue  as variant
+
+    for nI := 1 to len(aFields)
+        uValue := oInput[aFields[nI]["name"]]
+        if uValue == nil
+            if aFields[nI]["required"]
+                aAdd(aErrors, "Field '" + aFields[nI]["name"] + "' is required")
+            endif
+            loop
+        endif
+        ::validateField(aFields[nI], uValue, aErrors)
+    next nI
+
+    return aErrors
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cTable Character - table alias
+@param oInput JSON - parsed mutation input object (flat field map)
+@return Array - error messages, empty if valid. Update is partial: only
+        fields actually present in oInput are validated (type/length);
+        required-ness is not enforced here (an omitted field is simply not
+        touched by the write) and key fields are validated by the caller
+        separately (GqlMutationExecutor, via GqlDictionaryReader:getOrderKey()).
+/@*/
+method validateUpdate(cTable as character, oInput as json) as array class GqlInputValidator
+    local aFields := ::oDictionaryReader:getTableFields(cTable) as array
+    local aErrors := {} as array
+    local nI      := 0 as numeric
+    local uValue  as variant
+
+    for nI := 1 to len(aFields)
+        uValue := oInput[aFields[nI]["name"]]
+        if uValue == nil
+            loop
+        endif
+        ::validateField(aFields[nI], uValue, aErrors)
+    next nI
+
+    return aErrors
+endmethod
+
+method validateField(oFieldMeta as json, uValue as variant, aErrors as array) as object class GqlInputValidator
+    local cType   := oFieldMeta["sx3Type"] as character
+    local cName   := oFieldMeta["name"] as character
+    local nMaxLen := oFieldMeta["maxLength"] as numeric
+
+    if cType == "N"
+        if valtype(uValue) != "N"
+            aAdd(aErrors, "Field '" + cName + "' must be numeric")
+        endif
+    elseif cType == "L"
+        if valtype(uValue) != "L"
+            aAdd(aErrors, "Field '" + cName + "' must be boolean")
+        endif
+    elseif cType == "C"
+        if valtype(uValue) != "C"
+            aAdd(aErrors, "Field '" + cName + "' must be a string")
+        elseif len(uValue) > nMaxLen
+            aAdd(aErrors, "Field '" + cName + "' exceeds max length " + cValToChar(nMaxLen))
+        endif
+    endif
+
+    return self
+endmethod
+
+endnamespace
