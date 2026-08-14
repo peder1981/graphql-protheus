@@ -73,6 +73,11 @@ method getType(cTable as character) as json class GqlSchemaProvider
     local oType   as json
     local aFields as array
     local nI      := 0 as numeric
+    local aRelations := {} as array
+    local aRelationSummary := {} as array
+    local nJ := 0 as numeric
+    local oRel as json
+    local cRelType := "" as character
 
     if ascan(aNames, {|c| c == cTable}) == 0
         return nil
@@ -86,7 +91,22 @@ method getType(cTable as character) as json class GqlSchemaProvider
     oType   := JsonObject():New()
     oType["name"] := cTable
     oType["fields"] := aFields
-    oType["relations"] := {}
+
+    aRelations := ::oDictionaryReader:getRelations(cTable)
+
+    for nJ := 1 to len(aRelations)
+        cRelType := aRelations[nJ]["relatedTable"]
+        if aRelations[nJ]["cardinality"] == "MANY"
+            cRelType := "[" + aRelations[nJ]["relatedTable"] + "]"
+        endif
+        oRel := JsonObject():New()
+        oRel["name"] := aRelations[nJ]["relatedTable"]
+        oRel["type"] := cRelType
+        oRel["cardinality"] := aRelations[nJ]["cardinality"]
+        aAdd(aRelationSummary, oRel)
+    next nJ
+
+    oType["relations"] := aRelationSummary
 
     ::hTypeCache[cTable] := oType
     return oType

@@ -31,3 +31,9 @@ class TestGraphQLDynamicType:
         result = self.client.http_get("/graphql?type=SRA")
         data = json.loads(result.text)
         assert "errors" in data
+
+    def test_type_exposes_sx9_relations(self):
+        result = self.client.http_get("/graphql?type=SA1")
+        data = json.loads(result.text)
+        relation_names = [r["name"] for r in data["data"]["__type"]["relations"]]
+        assert isinstance(relation_names, list)

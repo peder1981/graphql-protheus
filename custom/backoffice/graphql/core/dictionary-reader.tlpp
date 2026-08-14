@@ -19,6 +19,7 @@ class GqlDictionaryReader
     public method listTables() as array
     public method getTableFields(cTable as character) as array
     public method mapScalarType(cSx3Type as character, nDecimal as numeric) as character
+    public method getRelations(cTable as character) as array
 endclass
 
 method new(oAccessControl as object) as object class GqlDictionaryReader
@@ -117,6 +118,58 @@ method mapScalarType(cSx3Type as character, nDecimal as numeric) as character cl
         return "String"
     endif
     return "String"
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Array - JSON {relatedTable, localFields, foreignFields, cardinality}
+        per SX9 rule where cTable is the origin (X9_DOM) and the
+        destination table is itself allowed.
+/@*/
+method getRelations(cTable as character) as array class GqlDictionaryReader
+    local aResult := {} as array
+    local cAlq    := GetNextAlias() as character
+    local cSx9Table := RetSqlName("SX9") as character
+    local cQuery  := "" as character
+    local cRelated := "" as character
+    local oRow     as json
+    local cCardinality := "" as character
+
+    if empty(cSx9Table)
+        // ponytail: SX9 not registered in every Protheus deployment (confirmed
+        // empty RetSqlName against the live server this plan was verified
+        // against) - degrade to "no relations" instead of a malformed query.
+        return aResult
+    endif
+
+    cQuery := "SELECT X9_CDOM AS RTABLE, X9_EXPDOM AS RLOCAL, X9_EXPCDOM AS RFOREIGN, X9_LIGCDOM AS RCARD" + ;
+               " FROM " + cSx9Table + ;
+               " WHERE D_E_L_E_T_ = ' ' AND X9_DOM = '" + cTable + "'"
+
+    TCQuery cQuery New Alias &cAlq
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cRelated := alltrim((cAlq)->RTABLE)
+        if ::oAccessControl:isTableAllowed(cRelated)
+            cCardinality := "MANY"
+            if alltrim((cAlq)->RCARD) == "1"
+                cCardinality := "ONE"
+            endif
+            oRow := JsonObject():New()
+            oRow["relatedTable"] := cRelated
+            oRow["localFields"] := alltrim((cAlq)->RLOCAL)
+            oRow["foreignFields"] := alltrim((cAlq)->RFOREIGN)
+            oRow["cardinality"] := cCardinality
+            aAdd(aResult, oRow)
+        endif
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+
+    return aResult
 endmethod
 
 endnamespace
