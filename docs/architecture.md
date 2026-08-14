@@ -18,6 +18,5 @@ relationship fields from SX9. Tables/fields are filtered by
 `GqlAccessControl` (core/access-control.tlpp) against
 `config/graphql-config.json`'s deny-lists before anything is cached.
 
-The permission hook (`GqlAccessControl:allowField`) always returns `.T.`
-in this sub-project — it exists so the Auth sub-project can wire in real
-per-user permissions without touching any other file.
+Per-user permission checks are out of scope for this sub-project; the Auth
+sub-project will add them, likely as another method on `GqlAccessControl`.
