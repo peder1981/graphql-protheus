@@ -20,6 +20,8 @@ class GqlDictionaryReader
     public method getTableFields(cTable as character) as array
     public method mapScalarType(cSx3Type as character, nDecimal as numeric) as character
     public method getRelations(cTable as character) as array
+    public method getOrderKey(cTable as character) as character
+    public method getFilialField(cTable as character) as character
 endclass
 
 method new(oAccessControl as object) as object class GqlDictionaryReader
@@ -170,6 +172,80 @@ method getRelations(cTable as character) as array class GqlDictionaryReader
     (cAlq)->(dbCloseArea())
 
     return aResult
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@return Character - comma-joined key field list from SIX order 1;
+        falls back to the first scalar field of the table if no SIX
+        row exists for order 1.
+/@*/
+method getOrderKey(cTable as character) as character class GqlDictionaryReader
+    local cAlq   := GetNextAlias() as character
+    local cSixTable := RetSqlName("SIX") as character
+    local cQuery := "" as character
+    local cKey   := "" as character
+    local aFields as array
+
+    if !empty(cSixTable)
+        // ponytail: SIX not registered in every Protheus deployment (confirmed
+        // empty RetSqlName against the live server this plan was verified
+        // against) - fall straight through to the scalar-field fallback below
+        // instead of running a malformed query.
+        cQuery := "SELECT X6_CHAVE AS RKEY FROM " + cSixTable + ;
+                   " WHERE D_E_L_E_T_ = ' ' AND X6_ARQUIVO = '" + cTable + "' AND X6_ORDEM = '1'"
+        TCQuery cQuery New Alias &cAlq
+        (cAlq)->(dbGoTop())
+        if !(cAlq)->(Eof())
+            cKey := alltrim((cAlq)->RKEY)
+        endif
+        (cAlq)->(dbCloseArea())
+    endif
+
+    if !empty(cKey)
+        return cKey
+    endif
+
+    aFields := ::getTableFields(cTable)
+    if len(aFields) > 0
+        return aFields[1]["name"]
+    endif
+    return ""
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Character - the real branch field name for cTable (e.g. "A1_FILIAL"),
+        found by suffix match against SX3, or "" if the table has none.
+        Queries SX3 directly (not via getTableFields()) since the branch
+        field is used internally for the mandatory filial filter and must
+        be found even if X3_VISUAL = "N" or it matches a denyFields pattern.
+/@*/
+method getFilialField(cTable as character) as character class GqlDictionaryReader
+    local cAlq    := GetNextAlias() as character
+    local cQuery  := "SELECT X3_CAMPO AS FCAMPO FROM " + RetSqlName("SX3") + ;
+                      " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = '" + cTable + "'" as character
+    local cField  := "" as character
+    local cResult := "" as character
+
+    TCQuery cQuery New Alias &cAlq
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cField := alltrim((cAlq)->FCAMPO)
+        if right(cField, 7) == "_FILIAL"
+            cResult := cField
+        endif
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+
+    return cResult
 endmethod
 
 endnamespace

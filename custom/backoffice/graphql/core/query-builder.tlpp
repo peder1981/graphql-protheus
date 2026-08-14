@@ -1,0 +1,180 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlQueryBuilder - turns a table name, a scalar field list and parsed
+      GraphQL arguments into a paginated SQL query string. Every query
+      unconditionally gets the filial and D_E_L_E_T_ = ' ' filters — the
+      caller cannot override or omit them (this environment runs on
+      PostgreSQL, whose MVCC needs no lock hint on reads, so %nolock% is
+      not used here — see Global Constraints). This environment's query
+      execution path (`TCQuery ... New Alias &cAlias`, from `topconn.ch`)
+      has no bind-parameter support, so every value that reaches the SQL
+      text goes through EscapeValue() (single-quote doubling) first —
+      never raw string concatenation of client-supplied values.
+      ponytail: pagination uses ROW_NUMBER() OVER (ORDER BY <SIX order 1>)
+      wrapped in a subquery — portable across the SQL Server/Oracle/
+      PostgreSQL backends Protheus targets. Add cursor pagination if
+      offset-based paging on huge tables becomes a measured bottleneck.
+/@*/
+class GqlQueryBuilder
+    private data oConfig as object
+
+    public method new(oConfig as object) as object
+    public method build(cTable as character, cFilialField as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character) as character
+    method resolveLimit(oArgs as json) as numeric
+    method resolveOffset(oArgs as json) as numeric
+    method applyFilters(oArgs as json) as character
+    method opToSql(cOp as character) as character
+    method joinFields(aFields as array) as character
+    static method EscapeValue(cValue as character) as character
+endclass
+
+method new(oConfig as object) as object class GqlQueryBuilder
+    ::oConfig := oConfig
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@param cFilialField Character - the real branch field name for cTable
+       (e.g. "A1_FILIAL" for "SA1"; see GqlDictionaryReader:getFilialField()
+       — never the same as cTable + "_FILIAL", the field prefix and the
+       table alias are not the same string)
+@param aScalarFields Array - field names to select
+@param oArgs JSON - parsed GraphQL arguments (limit, offset, filter)
+@param cOrderKey Character - comma-joined ORDER BY field list
+@param cExtraWhere Character - additional, already-safe WHERE fragment, or
+       "" (used by the executor to scope nested relationship queries to
+       the parent row's key; the executor is responsible for escaping any
+       value it interpolates there via EscapeValue())
+@return Character - the full, ready-to-run SQL text
+/@*/
+method build(cTable as character, cFilialField as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character) as character class GqlQueryBuilder
+    local nLimit   := ::resolveLimit(oArgs) as numeric
+    local nOffset  := ::resolveOffset(oArgs) as numeric
+    local cFilialEsc := GqlQueryBuilder():EscapeValue(cFilAnt) as character
+    local cWhere   := "D_E_L_E_T_ = ' '" as character
+    local cSelect  := ::joinFields(aScalarFields) as character
+    local cFilterWhere as character
+    local cSql     as character
+
+    if !empty(cFilialField)
+        cWhere += " AND " + cFilialField + " = '" + cFilialEsc + "'"
+    endif
+
+    cFilterWhere := ::applyFilters(oArgs)
+    if !empty(cFilterWhere)
+        cWhere += " AND " + cFilterWhere
+    endif
+
+    if !empty(cExtraWhere)
+        cWhere += " AND " + cExtraWhere
+    endif
+
+    cSql := "SELECT " + cSelect + " FROM (" + ;
+             "SELECT " + cSelect + ", ROW_NUMBER() OVER (ORDER BY " + cOrderKey + ") AS GQL_RN" + ;
+             " FROM " + RetSqlName(cTable) + " WHERE " + cWhere + ;
+             ") GQL_PAGE WHERE GQL_RN > " + cValToChar(nOffset) + " AND GQL_RN <= " + cValToChar(nOffset + nLimit)
+
+    return cSql
+endmethod
+
+method resolveLimit(oArgs as json) as numeric class GqlQueryBuilder
+    local nLimit := ::oConfig:getDefaultPageSize() as numeric
+    if oArgs["limit"] != nil
+        nLimit := oArgs["limit"]["value"]
+    endif
+    if nLimit > ::oConfig:getMaxPageSize()
+        nLimit := ::oConfig:getMaxPageSize()
+    endif
+    return nLimit
+endmethod
+
+method resolveOffset(oArgs as json) as numeric class GqlQueryBuilder
+    if oArgs["offset"] != nil
+        return oArgs["offset"]["value"]
+    endif
+    return 0
+endmethod
+
+method applyFilters(oArgs as json) as character class GqlQueryBuilder
+    local oFilterArg := oArgs["filter"] as json
+    local aFilters := {} as array
+    local aClauses := {} as array
+    local nI       := 0 as numeric
+    local oFilter  as json
+    local cOp      as character
+    local cSqlOp   as character
+    local cResult  := "" as character
+
+    if oFilterArg == nil
+        return ""
+    endif
+    aFilters := oFilterArg["value"]
+
+    for nI := 1 to len(aFilters)
+        oFilter := aFilters[nI]["value"]
+        cOp     := oFilter["op"]["value"]
+        cSqlOp  := ::opToSql(cOp)
+        aAdd(aClauses, oFilter["field"]["value"] + " " + cSqlOp + " '" + GqlQueryBuilder():EscapeValue(oFilter["value"]["value"]) + "'")
+    next nI
+
+    for nI := 1 to len(aClauses)
+        if nI > 1
+            cResult += " AND "
+        endif
+        cResult += aClauses[nI]
+    next nI
+
+    return cResult
+endmethod
+
+method opToSql(cOp as character) as character class GqlQueryBuilder
+    if cOp == "eq"
+        return "="
+    elseif cOp == "gt"
+        return ">"
+    elseif cOp == "gte"
+        return ">="
+    elseif cOp == "lt"
+        return "<"
+    elseif cOp == "lte"
+        return "<="
+    endif
+    return "=" // GqlValidator already rejects unsupported operators before build() runs
+endmethod
+
+method joinFields(aFields as array) as character class GqlQueryBuilder
+    local cResult := "" as character
+    local nI      := 0 as numeric
+    for nI := 1 to len(aFields)
+        if nI > 1
+            cResult += ", "
+        endif
+        cResult += aFields[nI]
+    next nI
+    return cResult
+endmethod
+
+/*/{Protheus.doc}
+@type Static Function
+@author GraphQL Engine Team
+@since 3.0.0
+@param cValue Character - raw value to interpolate into a SQL string literal
+@return Character - cValue with every single quote doubled, safe to wrap
+        in '...' in SQL text built by this class
+/@*/
+method EscapeValue(cValue as character) as character class GqlQueryBuilder
+    return StrTran(cValue, "'", "''")
+endmethod
+
+endnamespace
