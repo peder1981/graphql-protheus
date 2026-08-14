@@ -18,7 +18,7 @@ class GqlExecutor
 
     public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object
     public method execute(cQuerySource as character) as json
-    method resolveTableField(oField as json, cExtraWhere as character) as array
+    public method resolveTableField(oField as json, cExtraWhere as character) as array
     method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array
     method isScalarField(oType as json, cName as character) as logical
     method fieldNames(aSelection as array) as array

@@ -1,0 +1,308 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.1.0
+@desc GqlMutationExecutor - parses a mutation document, resolves each root
+      field to a table+operation (createTABLE/updateTABLE/deleteTABLE),
+      validates and writes via GqlInputValidator/GqlMutationBuilder, and
+      returns the affected row via the existing read-path executor.
+/@*/
+class GqlMutationExecutor
+    private data oMutationSchema   as object
+    private data oDictionaryReader as object
+    private data oInputValidator   as object
+    private data oMutationBuilder  as object
+    private data oExecutor         as object
+
+    public method new(oMutationSchema as object, oDictionaryReader as object, oInputValidator as object, oMutationBuilder as object, oExecutor as object) as object
+    public method execute(cQuerySource as character) as json
+    method resolveMutationField(oField as json) as json
+    method splitFieldName(cName as character) as json
+    method keyFieldNames(cTable as character) as array
+    method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as array) as array
+    method fetchByKey(cTable as character, oField as json, oInput as json, aKeyFields as array) as array
+endclass
+
+method new(oMutationSchema as object, oDictionaryReader as object, oInputValidator as object, oMutationBuilder as object, oExecutor as object) as object class GqlMutationExecutor
+    ::oMutationSchema   := oMutationSchema
+    ::oDictionaryReader := oDictionaryReader
+    ::oInputValidator   := oInputValidator
+    ::oMutationBuilder  := oMutationBuilder
+    ::oExecutor         := oExecutor
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cQuerySource Character - raw GraphQL mutation text
+@return JSON - {"data": {...}} on success, {"errors": [...]} on failure
+/@*/
+method execute(cQuerySource as character) as json class GqlMutationExecutor
+    local oParser := GqlParser():new(cQuerySource) as object
+    local oDoc    as json
+    local aDefs   as array
+    local aSel    as array
+    local oData   as json
+    local nI      := 0 as numeric
+    local nJ      := 0 as numeric
+    local oFieldResult as json
+    local oResult as json
+
+    oDoc := oParser:parse()
+    if oDoc == nil
+        return GqlErrors():fromArray(oParser:getErrors())
+    endif
+
+    oData := JsonObject():New()
+    aDefs := oDoc["definitions"]
+    for nI := 1 to len(aDefs)
+        aSel := aDefs[nI]["selectionSet"]
+        for nJ := 1 to len(aSel)
+            oFieldResult := ::resolveMutationField(aSel[nJ])
+            if oFieldResult["errors"] != nil
+                return oFieldResult
+            endif
+            oData[oFieldResult["alias"]] := oFieldResult["row"]
+        next nJ
+    next nI
+
+    oResult := JsonObject():New()
+    oResult["data"] := oData
+    return oResult
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param oField JSON - root Field AST node, e.g. createSA1(input: {...})
+@return JSON - either {"errors": [...]} (whole-request error, caller
+        returns it directly) or {"alias": <character>, "row": <json-or-nil>}
+        on success
+/@*/
+method resolveMutationField(oField as json) as json class GqlMutationExecutor
+    local oParsed   := ::splitFieldName(oField["name"]) as json
+    local cOp       as character
+    local cTable    as character
+    local oInputArg as json
+    local oInput    as json
+    local aErrors   := {} as array
+    local aKeyFields as array
+    local aSetFields as array
+    local aFields   as array
+    local aFieldNames as array
+    local nI        := 0 as numeric
+    local cFilialField as character
+    local cSql      as character
+    local nStat     := 0 as numeric
+    local aExisting as array
+    local aRows     as array
+    local oOut      as json
+    local cAlias    := "" as character
+
+    if oParsed == nil
+        return GqlErrors():single("Unknown or restricted mutation: " + oField["name"])
+    endif
+    cOp    := oParsed["op"]
+    cTable := oParsed["table"]
+
+    if !::oMutationSchema:isMutable(cTable)
+        return GqlErrors():single("Unknown or restricted mutation: " + oField["name"])
+    endif
+
+    oInputArg := oField["arguments"]["input"]
+    if oInputArg == nil .or. oInputArg["value"] == nil
+        return GqlErrors():single("Mutation '" + oField["name"] + "' requires an 'input' argument")
+    endif
+    oInput := oInputArg["value"]
+
+    cAlias := oField["name"]
+    if oField["alias"] != nil
+        cAlias := oField["alias"]
+    endif
+
+    aKeyFields := ::keyFieldNames(cTable)
+    cFilialField := ::oDictionaryReader:getFilialField(cTable)
+
+    if cOp == "create"
+        aErrors := ::oInputValidator:validateCreate(cTable, oInput)
+        if len(aErrors) > 0
+            return GqlErrors():fromArray(aErrors)
+        endif
+        aFields := ::oDictionaryReader:getTableFields(cTable)
+        aFieldNames := {}
+        for nI := 1 to len(aFields)
+            if oInput[aFields[nI]["name"]] != nil
+                aAdd(aFieldNames, aFields[nI]["name"])
+            endif
+        next nI
+        cSql := ::oMutationBuilder:buildInsert(cTable, cFilialField, oInput, aFieldNames)
+        nStat := TCSqlExec(cSql)
+        if nStat < 0
+            return GqlErrors():single("Write failed for '" + oField["name"] + "'")
+        endif
+        aRows := ::fetchByKey(cTable, oField, oInput, aKeyFields)
+        oOut := JsonObject():New()
+        oOut["alias"] := cAlias
+        if len(aRows) > 0
+            oOut["row"] := aRows[1]
+        else
+            oOut["row"] := nil
+        endif
+        return oOut
+
+    elseif cOp == "update"
+        for nI := 1 to len(aKeyFields)
+            if oInput[aKeyFields[nI]] == nil
+                return GqlErrors():single("Missing key field '" + aKeyFields[nI] + "' for update")
+            endif
+        next nI
+        aExisting := ::fetchByKey(cTable, oField, oInput, aKeyFields)
+        if len(aExisting) == 0
+            return GqlErrors():single("Row not found for update")
+        endif
+        aErrors := ::oInputValidator:validateUpdate(cTable, oInput)
+        if len(aErrors) > 0
+            return GqlErrors():fromArray(aErrors)
+        endif
+        aSetFields := ::nonKeyPresentFields(cTable, oInput, aKeyFields)
+        if len(aSetFields) == 0
+            return GqlErrors():single("Update requires at least one non-key field")
+        endif
+        cSql := ::oMutationBuilder:buildUpdate(cTable, cFilialField, oInput, aKeyFields, aSetFields)
+        nStat := TCSqlExec(cSql)
+        if nStat < 0
+            return GqlErrors():single("Write failed for '" + oField["name"] + "'")
+        endif
+        aRows := ::fetchByKey(cTable, oField, oInput, aKeyFields)
+        oOut := JsonObject():New()
+        oOut["alias"] := cAlias
+        if len(aRows) > 0
+            oOut["row"] := aRows[1]
+        else
+            oOut["row"] := nil
+        endif
+        return oOut
+
+    elseif cOp == "delete"
+        for nI := 1 to len(aKeyFields)
+            if oInput[aKeyFields[nI]] == nil
+                return GqlErrors():single("Missing key field '" + aKeyFields[nI] + "' for delete")
+            endif
+        next nI
+        aExisting := ::fetchByKey(cTable, oField, oInput, aKeyFields)
+        if len(aExisting) == 0
+            return GqlErrors():single("Row not found for delete")
+        endif
+        cSql := ::oMutationBuilder:buildSoftDelete(cTable, cFilialField, oInput, aKeyFields)
+        nStat := TCSqlExec(cSql)
+        if nStat < 0
+            return GqlErrors():single("Write failed for '" + oField["name"] + "'")
+        endif
+        oOut := JsonObject():New()
+        oOut["alias"] := cAlias
+        oOut["row"] := aExisting[1]
+        return oOut
+    endif
+
+    return GqlErrors():single("Unknown or restricted mutation: " + oField["name"])
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cName Character - root field name, e.g. "createSA1"
+@return JSON - {"op": "create"|"update"|"delete", "table": <character>},
+        or nil if cName doesn't start with a known mutation prefix
+/@*/
+method splitFieldName(cName as character) as json class GqlMutationExecutor
+    local oOut as json
+
+    oOut := JsonObject():New()
+    if left(cName, 6) == "create"
+        oOut["op"] := "create"
+        oOut["table"] := substr(cName, 7)
+        return oOut
+    elseif left(cName, 6) == "update"
+        oOut["op"] := "update"
+        oOut["table"] := substr(cName, 7)
+        return oOut
+    elseif left(cName, 6) == "delete"
+        oOut["op"] := "delete"
+        oOut["table"] := substr(cName, 7)
+        return oOut
+    endif
+
+    return nil
+endmethod
+
+method keyFieldNames(cTable as character) as array class GqlMutationExecutor
+    local cKey := ::oDictionaryReader:getOrderKey(cTable) as character
+    local aResult := {} as array
+    local nI := 0 as numeric
+    local nStart := 1 as numeric
+    local nComma := 0 as numeric
+
+    nComma := at(",", cKey)
+    while nComma > 0
+        aAdd(aResult, alltrim(substr(cKey, nStart, nComma - nStart)))
+        nStart := nComma + 1
+        nComma := at(",", cKey, nStart)
+    enddo
+    if nStart <= len(cKey)
+        aAdd(aResult, alltrim(substr(cKey, nStart)))
+    endif
+
+    return aResult
+endmethod
+
+method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as array) as array class GqlMutationExecutor
+    local aFields := ::oDictionaryReader:getTableFields(cTable) as array
+    local aResult := {} as array
+    local nI      := 0 as numeric
+    local cName   := "" as character
+
+    for nI := 1 to len(aFields)
+        cName := aFields[nI]["name"]
+        if ascan(aKeyFields, {|c| c == cName}) > 0
+            loop
+        endif
+        if oInput[cName] != nil
+            aAdd(aResult, cName)
+        endif
+    next nI
+
+    return aResult
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@desc Re-selects a single row by key fields, shaped by oField's own
+      selectionSet, using the existing read-path executor
+      (GqlExecutor:resolveTableField) - never duplicates row-fetch logic.
+/@*/
+method fetchByKey(cTable as character, oField as json, oInput as json, aKeyFields as array) as array class GqlMutationExecutor
+    local cWhere := "" as character
+    local nI     := 0 as numeric
+
+    for nI := 1 to len(aKeyFields)
+        if nI > 1
+            cWhere += " AND "
+        endif
+        cWhere += aKeyFields[nI] + " = '" + GqlQueryBuilder():EscapeValue(cValToChar(oInput[aKeyFields[nI]])) + "'"
+    next nI
+
+    return ::oExecutor:resolveTableField(oField, cWhere)
+endmethod
+
+endnamespace
