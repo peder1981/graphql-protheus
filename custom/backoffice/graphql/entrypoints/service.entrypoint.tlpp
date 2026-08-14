@@ -24,6 +24,12 @@ User Function GQLSERVICE() as logical
     local cTypeName  := "" as character
     local oResult    as json
     local oExecutor  as object
+    local oPeekParser as object
+    local oPeekDoc    as json
+    local oMutSchema  as object
+    local oMutValidator as object
+    local oMutBuilder as object
+    local oMutExecutor as object
 
     jParams   := oRest:getQueryRequest()
     cQuery    := jParams:GetJsonText("query")
@@ -36,8 +42,21 @@ User Function GQLSERVICE() as logical
     endif
 
     if !empty(cQuery)
-        oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig))
-        oResult := oExecutor:execute(cQuery)
+        oPeekParser := custom.backoffice.graphql.GqlParser():new(cQuery)
+        oPeekDoc := oPeekParser:parse()
+        if oPeekDoc == nil
+            oResult := custom.backoffice.graphql.GqlErrors():fromArray(oPeekParser:getErrors())
+        elseif len(oPeekDoc["definitions"]) > 0 .and. oPeekDoc["definitions"][1]["operation"] == "mutation"
+            oMutSchema    := custom.backoffice.graphql.GqlMutationSchema():new(oSchema, oConfig)
+            oMutValidator := custom.backoffice.graphql.GqlInputValidator():new(oDict)
+            oMutBuilder   := custom.backoffice.graphql.GqlMutationBuilder():new()
+            oExecutor     := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig))
+            oMutExecutor  := custom.backoffice.graphql.GqlMutationExecutor():new(oMutSchema, oDict, oMutValidator, oMutBuilder, oExecutor)
+            oResult := oMutExecutor:execute(cQuery)
+        else
+            oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig))
+            oResult := oExecutor:execute(cQuery)
+        endif
     elseif !empty(cTypeName)
         oResult := custom.backoffice.graphql.GqlIntrospection():typeDetail(oSchema, cTypeName)
     else
