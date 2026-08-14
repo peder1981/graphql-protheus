@@ -38,6 +38,15 @@ sufficient. `GqlInputValidator` checks required/type/length against SX3
 metadata before any SQL runs. Delete is always soft
 (`D_E_L_E_T_ = '*'`), matching how every query already filters reads.
 
+Unknown or denied input fields are currently silently ignored, not
+rejected with an explicit error: `GqlValidator` is never invoked on the
+mutation path, so a field name that isn't part of the dictionary-driven
+SET/INSERT field lists is simply excluded when those lists are built —
+it never reaches SQL, so this isn't a security hole, but it does diverge
+from normal GraphQL semantics (an unknown input-object field should be a
+validation error). Closing this is deferred to a future sub-project's
+per-field mutation argument validation.
+
 ### Known limitation: Concurrency and `R_E_C_N_O_` assignment
 
 `create` mutations assign `R_E_C_N_O_` (the table's physical primary key on

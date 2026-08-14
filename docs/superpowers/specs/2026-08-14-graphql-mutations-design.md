@@ -184,9 +184,21 @@ Reaproveita `GqlAccessControl` sem mudança de interface:
    `"Unknown or restricted mutation: <name>"`).
 2. **Deny-list estrutural** (existente): mesmo com a tabela em
    `allowMutations`, campos em `denyFields`/`X3_VISUAL == "N"` nunca entram
-   no `<TABLE>Input` gerado — enviá-los no input é um campo desconhecido do
-   tipo, rejeitado pelo `GqlValidator` de argumentos antes mesmo de chegar
-   no `GqlMutationExecutor`.
+   no `<TABLE>Input` gerado. **Comportamento real (corrigido)**: enviar um
+   desses campos (ou qualquer outro nome desconhecido) no input NÃO produz
+   um erro explícito — `GqlValidator` nunca é chamado no caminho de mutation
+   (só é referenciado a partir de `executor.tlpp`, o caminho de leitura). Na
+   prática, `GqlMutationExecutor:resolveMutationField()` monta suas listas
+   de campos (INSERT/SET) sempre a partir de metadados de dicionário
+   confiáveis (`GqlDictionaryReader:getTableFields()`), então um campo
+   desconhecido/negado no input é simplesmente ignorado — nunca chega a
+   compor SQL, então não há brecha de segurança, mas o cliente não recebe
+   nenhum aviso, o que diverge da semântica GraphQL normal (um campo
+   desconhecido de um input object deveria ser erro de validação). Fechar
+   isso corretamente requer plugar `GqlValidator` (ou equivalente) no
+   caminho de mutation — deixado como lacuna conhecida para o sub-projeto de
+   Auth, quando ele adicionar validação de argumento por campo para
+   mutations.
 3. **Permissão por usuário** (`GqlAccessControl:allowField` — removido no
    sub-projeto 1 por não ter nenhum chamador; se o sub-projeto de Auth
    precisar de um hook equivalente para mutations, ele é adicionado então,

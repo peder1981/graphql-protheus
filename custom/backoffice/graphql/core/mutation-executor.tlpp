@@ -24,7 +24,7 @@ class GqlMutationExecutor
     method resolveMutationField(oField as json) as json
     method splitFieldName(cName as character) as json
     method keyFieldNames(cTable as character) as array
-    method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as array) as array
+    method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as array, cFilialField as character) as array
     method fetchByKey(cTable as character, oField as json, oInput as json, aKeyFields as array, cFilialField as character) as array
 endclass
 
@@ -124,6 +124,9 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
     if oInputArg == nil .or. oInputArg["value"] == nil
         return GqlErrors():single("Mutation '" + oField["name"] + "' requires an 'input' argument")
     endif
+    if oInputArg["kind"] != "ObjectValue"
+        return GqlErrors():single("Mutation '" + oField["name"] + "' argument 'input' must be an object")
+    endif
     oInput := oInputArg["value"]
 
     aInputNames := oInput:GetNames()
@@ -181,7 +184,7 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
         if len(aErrors) > 0
             return GqlErrors():fromArray(aErrors)
         endif
-        aSetFields := ::nonKeyPresentFields(cTable, oInput, aKeyFields)
+        aSetFields := ::nonKeyPresentFields(cTable, oInput, aKeyFields, cFilialField)
         if len(aSetFields) == 0
             return GqlErrors():single("Update requires at least one non-key field")
         endif
@@ -273,7 +276,22 @@ method keyFieldNames(cTable as character) as array class GqlMutationExecutor
     return aResult
 endmethod
 
-method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as array) as array class GqlMutationExecutor
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.1.0
+@param cTable Character - table alias
+@param oInput JSON - parsed mutation input object (flat field map)
+@param aKeyFields Array - the table's order-key field names (excluded from SET)
+@param cFilialField Character - the table's own filial field name (also
+       excluded from SET, unconditionally, regardless of whether it is part
+       of aKeyFields - the filial value is always forced from cFilAnt by
+       GqlMutationBuilder, never taken from client input, so it must never
+       reach the SET-field list either).
+@return Array - field names present in oInput, excluding key fields and the
+        filial field, eligible for the UPDATE's SET clause.
+/@*/
+method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as array, cFilialField as character) as array class GqlMutationExecutor
     local aFields := ::oDictionaryReader:getTableFields(cTable) as array
     local aResult := {} as array
     local nI      := 0 as numeric
@@ -282,6 +300,9 @@ method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as ar
     for nI := 1 to len(aFields)
         cName := aFields[nI]["name"]
         if ascan(aKeyFields, {|c| c == cName}) > 0
+            loop
+        endif
+        if !empty(cFilialField) .and. cName == cFilialField
             loop
         endif
         if oInput[cName] != nil

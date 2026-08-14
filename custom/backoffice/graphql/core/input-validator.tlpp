@@ -33,14 +33,22 @@ endmethod
 @return Array - error messages, empty if valid. Every field returned by
         GqlDictionaryReader:getTableFields() is checked: required fields
         must be present, and any present field's type/length is validated.
+        The table's own filial field is skipped entirely - it is never read
+        from oInput by GqlMutationBuilder:buildInsert() (always forced from
+        cFilAnt), so enforcing required-ness on it here would be spurious
+        and inconsistent with the actual write behavior.
 /@*/
 method validateCreate(cTable as character, oInput as json) as array class GqlInputValidator
     local aFields := ::oDictionaryReader:getTableFields(cTable) as array
+    local cFilialField := ::oDictionaryReader:getFilialField(cTable) as character
     local aErrors := {} as array
     local nI      := 0 as numeric
     local uValue  as variant
 
     for nI := 1 to len(aFields)
+        if !empty(cFilialField) .and. aFields[nI]["name"] == cFilialField
+            loop
+        endif
         uValue := oInput[aFields[nI]["name"]]
         if uValue == nil
             if aFields[nI]["required"]
