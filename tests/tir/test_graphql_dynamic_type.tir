@@ -1,0 +1,33 @@
+"""
+TIR Test — GraphQL dynamic type detail (SX3-driven), deny-list on fields
+"""
+from contrib.tir import Webapp
+import json
+
+
+class TestGraphQLDynamicType:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_type_reflects_real_sx3_fields(self):
+        result = self.client.http_get("/graphql?type=SA1")
+        assert result.status_code == 200
+        data = json.loads(result.text)
+        field_names = [f["name"] for f in data["data"]["__type"]["fields"]]
+        assert "A1_COD" in field_names
+        assert "A1_NOME" in field_names
+
+    def test_type_omits_denied_fields(self):
+        result = self.client.http_get("/graphql?type=SA1")
+        data = json.loads(result.text)
+        field_names = [f["name"] for f in data["data"]["__type"]["fields"]]
+        assert not any("SENHA" in f for f in field_names)
+
+    def test_unknown_or_denied_table_returns_error(self):
+        result = self.client.http_get("/graphql?type=SRA")
+        data = json.loads(result.text)
+        assert "errors" in data

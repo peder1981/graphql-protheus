@@ -1,0 +1,116 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlSchemaProvider - lazy, TTL-cached GraphQL schema built from
+      GqlDictionaryReader. Table names are cheap and cached eagerly on
+      first listTableNames() call; full per-table types are generated
+      only when getType() is called for that table.
+/@*/
+class GqlSchemaProvider
+    private data oDictionaryReader as object
+    private data oConfig           as object
+    private data aTableNamesCache  as array
+    private data hTypeCache        as json
+    private data nCacheBuiltAt     as numeric
+
+    public method new(oDictionaryReader as object, oConfig as object) as object
+    public method listTableNames() as array
+    public method getType(cTable as character) as json
+    public method reload() as object
+    method expireIfStale() as object
+endclass
+
+method new(oDictionaryReader as object, oConfig as object) as object class GqlSchemaProvider
+    ::oDictionaryReader := oDictionaryReader
+    ::oConfig           := oConfig
+    ::aTableNamesCache  := nil
+    ::hTypeCache        := JsonObject():New()
+    ::nCacheBuiltAt      := 0
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@return Array - allowed table aliases, cached
+/@*/
+method listTableNames() as array class GqlSchemaProvider
+    local aTables := {} as array
+    local nI      := 0    as numeric
+
+    ::expireIfStale()
+
+    if ::aTableNamesCache == nil
+        aTables := ::oDictionaryReader:listTables()
+        ::aTableNamesCache := {}
+        for nI := 1 to len(aTables)
+            aAdd(::aTableNamesCache, aTables[nI]["alias"])
+        next nI
+        if ::nCacheBuiltAt == 0
+            ::nCacheBuiltAt := seconds()
+        endif
+    endif
+
+    return ::aTableNamesCache
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias
+@return JSON - {name, fields:[{name,type}]}, or nil if unknown/denied
+/@*/
+method getType(cTable as character) as json class GqlSchemaProvider
+    local aNames  := ::listTableNames()
+    local oType   as json
+    local aFields as array
+    local nI      := 0 as numeric
+
+    if ascan(aNames, {|c| c == cTable}) == 0
+        return nil
+    endif
+
+    if ::hTypeCache[cTable] != nil
+        return ::hTypeCache[cTable]
+    endif
+
+    aFields := ::oDictionaryReader:getTableFields(cTable)
+    oType   := JsonObject():New()
+    oType["name"] := cTable
+    oType["fields"] := aFields
+    oType["relations"] := {}
+
+    ::hTypeCache[cTable] := oType
+    return oType
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@desc Clears both caches. Call after dictionary changes, or let TTL expire.
+/@*/
+method reload() as object class GqlSchemaProvider
+    ::aTableNamesCache := nil
+    ::hTypeCache        := JsonObject():New()
+    ::nCacheBuiltAt      := 0
+    return self
+endmethod
+
+method expireIfStale() as object class GqlSchemaProvider
+    local nTtl := ::oConfig:getSchemaCacheTtlSeconds()
+    if ::nCacheBuiltAt > 0 .and. (seconds() - ::nCacheBuiltAt) > nTtl
+        ::reload()
+    endif
+    return self
+endmethod
+
+endnamespace

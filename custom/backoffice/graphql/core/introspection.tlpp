@@ -1,0 +1,60 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlIntrospection - builds the __schema/__type response envelopes.
+/@*/
+class GqlIntrospection
+    static method schemaNames(oSchemaProvider as object) as json
+    static method typeDetail(oSchemaProvider as object, cTable as character) as json
+endclass
+
+method schemaNames(oSchemaProvider as object) as json class GqlIntrospection
+    local aNames := oSchemaProvider:listTableNames() as array
+    local aTypes := {}                                 as array
+    local nI     := 0                                    as numeric
+    local oData  := JsonObject():New()                        as json
+    local oSchema := JsonObject():New()                         as json
+    local oQType  := JsonObject():New()                          as json
+    local oType   as json
+    local oResult as json
+
+    for nI := 1 to len(aNames)
+        oType := JsonObject():New()
+        oType["name"] := aNames[nI]
+        aAdd(aTypes, oType)
+    next nI
+
+    oQType["name"] := "Query"
+    oSchema["queryType"] := oQType
+    oSchema["types"] := aTypes
+    oData["__schema"] := oSchema
+
+    oResult := JsonObject():New()
+    oResult["data"] := oData
+    return oResult
+endmethod
+
+method typeDetail(oSchemaProvider as object, cTable as character) as json class GqlIntrospection
+    local oType := oSchemaProvider:getType(upper(alltrim(cTable))) as json
+    local oData as json
+    local oResult as json
+
+    if oType == nil
+        return GqlErrors():single("Unknown or restricted type: " + cTable)
+    endif
+
+    oData := JsonObject():New()
+    oData["__type"] := oType
+
+    oResult := JsonObject():New()
+    oResult["data"] := oData
+    return oResult
+endmethod
+
+endnamespace

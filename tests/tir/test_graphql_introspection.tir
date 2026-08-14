@@ -1,0 +1,29 @@
+"""
+TIR Test — GraphQL schema introspection (table names only, deny-list applied)
+"""
+from contrib.tir import Webapp
+import json
+
+
+class TestGraphQLIntrospection:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_schema_lists_allowed_tables(self):
+        result = self.client.http_get("/graphql")
+        assert result.status_code == 200
+        data = json.loads(result.text)
+        assert "data" in data
+        names = [t["name"] for t in data["data"]["__schema"]["types"]]
+        assert "SA1" in names
+
+    def test_schema_omits_denied_tables(self):
+        result = self.client.http_get("/graphql")
+        data = json.loads(result.text)
+        names = [t["name"] for t in data["data"]["__schema"]["types"]]
+        assert "SRA" not in names
+        assert not any(n.startswith("SRH") for n in names)

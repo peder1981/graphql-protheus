@@ -1,0 +1,38 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlErrors - builds the {"errors":[{"message":...}]} response envelope.
+/@*/
+class GqlErrors
+    static method single(cMessage as character) as json
+    static method fromArray(aMessages as array) as json
+endclass
+
+method single(cMessage as character) as json class GqlErrors
+    return GqlErrors():fromArray({cMessage})
+endmethod
+
+method fromArray(aMessages as array) as json class GqlErrors
+    local aErrors := {} as array
+    local nI      := 0    as numeric
+    local oErr    as json
+    local oResult as json
+
+    for nI := 1 to len(aMessages)
+        oErr := JsonObject():New()
+        oErr["message"] := aMessages[nI]
+        aAdd(aErrors, oErr)
+    next nI
+
+    oResult := JsonObject():New()
+    oResult["errors"] := aErrors
+    return oResult
+endmethod
+
+endnamespace

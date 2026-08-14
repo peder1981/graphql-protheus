@@ -1,0 +1,48 @@
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+#include "totvs.ch"
+
+/*/{Protheus.doc}
+GQLSERVICE
+Dynamic GraphQL REST endpoint over the Protheus data dictionary.
+GET /rest/graphql              -> schema type names (deny-list applied)
+GET /rest/graphql?type=<TABLE> -> full type detail for one table
+GET /rest/graphql?query=<...>  -> full query execution (Task 9)
+@type User Function
+@author GraphQL Engine Team
+@since 3.0.0
+@return Logical - .T.
+/*/
+@Get("/graphql")
+User Function GQLSERVICE() as logical
+    local oConfig    := custom.backoffice.graphql.GqlConfig():new()             as object
+    local oAccess    := custom.backoffice.graphql.GqlAccessControl():new(oConfig) as object
+    local oDict      := custom.backoffice.graphql.GqlDictionaryReader():new(oAccess) as object
+    local oSchema    := custom.backoffice.graphql.GqlSchemaProvider():new(oDict, oConfig) as object
+    local jParams    as json
+    local cQuery     := "" as character
+    local cTypeName  := "" as character
+    local oResult    as json
+
+    jParams   := oRest:getQueryRequest()
+    cQuery    := jParams:GetJsonText("query")
+    cTypeName := jParams:GetJsonText("type")
+    if cQuery == "null"
+        cQuery := ""
+    endif
+    if cTypeName == "null"
+        cTypeName := ""
+    endif
+
+    if !empty(cQuery)
+        // Wired in Task 9 (full parse/validate/execute pipeline).
+        oResult := custom.backoffice.graphql.GqlErrors():single("query execution not available yet")
+    elseif !empty(cTypeName)
+        oResult := custom.backoffice.graphql.GqlIntrospection():typeDetail(oSchema, cTypeName)
+    else
+        oResult := custom.backoffice.graphql.GqlIntrospection():schemaNames(oSchema)
+    endif
+
+    oRest:setStatusResponse(200, oResult:toJson())
+
+Return .T.

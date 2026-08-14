@@ -1,0 +1,25 @@
+"""
+TIR Test — deny-list enforcement across introspection surfaces
+"""
+from contrib.tir import Webapp
+import json
+
+
+class TestGraphQLDenylist:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_denied_table_absent_from_schema_names(self):
+        result = self.client.http_get("/graphql")
+        data = json.loads(result.text)
+        names = [t["name"] for t in data["data"]["__schema"]["types"]]
+        assert "SR5" not in names
+
+    def test_denied_table_type_lookup_errors(self):
+        result = self.client.http_get("/graphql?type=SR5")
+        data = json.loads(result.text)
+        assert "errors" in data

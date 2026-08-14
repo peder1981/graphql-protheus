@@ -1,0 +1,122 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "topconn.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlDictionaryReader - raw read access to SX2 (tables) and SX3 (fields),
+      filtered through GqlAccessControl. No caching here — caching is
+      GqlSchemaProvider's job.
+/@*/
+class GqlDictionaryReader
+    private data oAccessControl as object
+
+    public method new(oAccessControl as object) as object
+    public method listTables() as array
+    public method getTableFields(cTable as character) as array
+    public method mapScalarType(cSx3Type as character, nDecimal as numeric) as character
+endclass
+
+method new(oAccessControl as object) as object class GqlDictionaryReader
+    ::oAccessControl := oAccessControl
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@return Array - JSON {alias, name} per allowed table, ordered by alias
+/@*/
+method listTables() as array class GqlDictionaryReader
+    local aResult := {}     as array
+    local cAlq    := GetNextAlias() as character
+    local cQuery  := "SELECT X2_CHAVE AS TALIAS, X2_NOME AS TNOME FROM " + RetSqlName("SX2") + ;
+                      " WHERE D_E_L_E_T_ = ' ' ORDER BY X2_CHAVE" as character
+    local cAlias  := "" as character
+    local oRow    as json
+
+    TCQuery cQuery New Alias &cAlq
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cAlias := alltrim((cAlq)->TALIAS)
+        if ::oAccessControl:isTableAllowed(cAlias)
+            oRow := JsonObject():New()
+            oRow["alias"] := cAlias
+            oRow["name"] := alltrim((cAlq)->TNOME)
+            aAdd(aResult, oRow)
+        endif
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+
+    return aResult
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Array - JSON {name, sx3Type, graphqlType} per allowed, visible field
+/@*/
+method getTableFields(cTable as character) as array class GqlDictionaryReader
+    local aResult  := {} as array
+    local cAlq     := GetNextAlias() as character
+    local cQuery   := "SELECT X3_CAMPO AS FCAMPO, X3_TIPO AS FTIPO, X3_DECIMAL AS FDECIMAL, X3_VISUAL AS FVISUAL" + ;
+                       " FROM " + RetSqlName("SX3") + ;
+                       " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = '" + cTable + "' ORDER BY X3_ORDEM" as character
+    local cField   := "" as character
+    local oRow     as json
+
+    if !::oAccessControl:isTableAllowed(cTable)
+        return aResult
+    endif
+
+    TCQuery cQuery New Alias &cAlq
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cField := alltrim((cAlq)->FCAMPO)
+        if alltrim((cAlq)->FVISUAL) != "N" .and. ::oAccessControl:isFieldAllowed(cTable, cField)
+            oRow := JsonObject():New()
+            oRow["name"] := cField
+            oRow["sx3Type"] := alltrim((cAlq)->FTIPO)
+            oRow["graphqlType"] := ::mapScalarType(alltrim((cAlq)->FTIPO), (cAlq)->FDECIMAL)
+            aAdd(aResult, oRow)
+        endif
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+
+    return aResult
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cSx3Type Character - SX3 X3_TIPO value (C/N/D/L/M)
+@param nDecimal Numeric - SX3 X3_DECIMAL value
+@return Character - GraphQL scalar name
+/@*/
+method mapScalarType(cSx3Type as character, nDecimal as numeric) as character class GqlDictionaryReader
+    if cSx3Type == "N"
+        if nDecimal == 0
+            return "Int"
+        endif
+        return "Float"
+    elseif cSx3Type == "L"
+        return "Boolean"
+    elseif cSx3Type == "D"
+        return "String"
+    elseif cSx3Type == "M"
+        return "String"
+    endif
+    return "String"
+endmethod
+
+endnamespace
