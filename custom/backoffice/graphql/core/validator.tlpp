@@ -1,0 +1,161 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlValidator - validates a parsed AST against the dynamic schema
+      before execution: unknown tables, unknown fields, unsupported filter
+      operators.
+/@*/
+class GqlValidator
+    private data oSchemaProvider as object
+
+    public method new(oSchemaProvider as object) as object
+    public method validate(oDocument as json) as array
+    method validateRootField(oField as json, aErrors as array) as object
+    method validateSelection(oType as json, aSelection as array, aErrors as array) as object
+    method fieldExistsOnType(oType as json, cField as character) as logical
+    method relationTargetType(oType as json, cField as character) as json
+    method validateArguments(oType as json, oArgs as json, aErrors as array) as object
+endclass
+
+method new(oSchemaProvider as object) as object class GqlValidator
+    ::oSchemaProvider := oSchemaProvider
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param oDocument JSON - Document AST from GqlParser:parse()
+@return Array - error messages, empty if the document is valid
+/@*/
+method validate(oDocument as json) as array class GqlValidator
+        local aErrors := {} as array
+        local aDefs   := oDocument["definitions"] as array
+        local nI      := 0 as numeric
+        local aSel    as array
+        local nJ      := 0 as numeric
+
+        for nI := 1 to len(aDefs)
+            aSel := aDefs[nI]["selectionSet"]
+            for nJ := 1 to len(aSel)
+                ::validateRootField(aSel[nJ], aErrors)
+            next nJ
+        next nI
+
+        return aErrors
+    endmethod
+
+    method validateRootField(oField as json, aErrors as array) as object class GqlValidator
+        local cTable := oField["name"] as character
+        local oType  := ::oSchemaProvider:getType(cTable) as json
+        local aSubSel as array
+
+        if oType == nil
+            aAdd(aErrors, "Unknown or restricted table: '" + cTable + "'")
+            return self
+        endif
+
+        ::validateArguments(oType, oField["arguments"], aErrors)
+
+        aSubSel := oField["selectionSet"]
+        if aSubSel == nil
+            aAdd(aErrors, "Field '" + cTable + "' requires a selection of sub-fields")
+            return self
+        endif
+        ::validateSelection(oType, aSubSel, aErrors)
+        return self
+    endmethod
+
+    method validateSelection(oType as json, aSelection as array, aErrors as array) as object class GqlValidator
+        local nI       := 0 as numeric
+        local oField   as json
+        local cName    as character
+        local oRelType as json
+
+        for nI := 1 to len(aSelection)
+            oField := aSelection[nI]
+            cName  := oField["name"]
+
+            if ::fieldExistsOnType(oType, cName)
+                loop
+            endif
+
+            oRelType := ::relationTargetType(oType, cName)
+            if oRelType != nil
+                if oField["selectionSet"] == nil
+                    aAdd(aErrors, "Relation field '" + cName + "' requires a selection of sub-fields")
+                else
+                    ::validateSelection(oRelType, oField["selectionSet"], aErrors)
+                endif
+                loop
+            endif
+
+            aAdd(aErrors, "Unknown field '" + cName + "' on type '" + oType["name"] + "'")
+        next nI
+        return self
+    endmethod
+
+    method fieldExistsOnType(oType as json, cField as character) as logical class GqlValidator
+        local aFields := oType["fields"] as array
+        local nI      := 0 as numeric
+
+        for nI := 1 to len(aFields)
+            if aFields[nI]["name"] == cField
+                return .T.
+            endif
+        next nI
+        return .F.
+    endmethod
+
+    method relationTargetType(oType as json, cField as character) as json class GqlValidator
+        local aRelations := oType["relations"] as array
+        local nI         := 0 as numeric
+
+        for nI := 1 to len(aRelations)
+            if aRelations[nI]["name"] == cField
+                return ::oSchemaProvider:getType(cField)
+            endif
+        next nI
+        return nil
+    endmethod
+
+    method validateArguments(oType as json, oArgs as json, aErrors as array) as object class GqlValidator
+        local oFilterArg := oArgs["filter"] as json
+        local aFilters   := {} as array
+        local nI       := 0 as numeric
+        local oFilter   as json
+        local aValidOps := {"eq", "gt", "gte", "lt", "lte"} as array
+
+        if oFilterArg == nil
+            return self
+        endif
+        aFilters := oFilterArg["value"]
+        if valtype(aFilters) != "A"
+            aAdd(aErrors, "Argument 'filter' must be a list")
+            return self
+        endif
+
+        for nI := 1 to len(aFilters)
+            oFilter := aFilters[nI]["value"]
+            if oFilter["field"] == nil .or. oFilter["op"] == nil .or. oFilter["value"] == nil
+                aAdd(aErrors, "Each filter item requires field, op and value")
+                loop
+            endif
+            if !::fieldExistsOnType(oType, oFilter["field"]["value"])
+                aAdd(aErrors, "Unknown filter field '" + oFilter["field"]["value"] + "' on type '" + oType["name"] + "'")
+            endif
+            if ascan(aValidOps, {|c| c == oFilter["op"]["value"]}) == 0
+                aAdd(aErrors, "Unsupported filter operator '" + oFilter["op"]["value"] + "'")
+            endif
+        next nI
+        return self
+    endmethod
+
+endnamespace
