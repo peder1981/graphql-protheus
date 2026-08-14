@@ -32,6 +32,7 @@ method new() as object class GqlConfig
     local cRaw     := "" as character
     local oJson    as json
     local oPag     as json
+    local uParseResult as variant
 
     ::aDenyTables         := {}
     ::aDenyFields         := {}
@@ -46,7 +47,8 @@ method new() as object class GqlConfig
     endif
 
     oJson := JsonObject():New()
-    if oJson:FromJson(cRaw) > 0
+    uParseResult := oJson:FromJson(cRaw)
+    if valtype(uParseResult) != "U"
         FWLogMsg("GqlConfig: " + cPath + " is not valid JSON, using built-in defaults", .F.)
         return self
     endif
