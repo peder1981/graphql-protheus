@@ -6,13 +6,13 @@
 
 **Architecture:** A layered pipeline — `dictionary-reader` (raw SX2/SX3/SX9 access) → `access-control` (deny-list + permission stub) → `schema-provider` (lazy cached GraphQL types) → `lexer`/`parser` (GraphQL text → AST) → `validator` (AST vs schema) → `query-builder` (AST → bound SQL) → `executor` (orchestrates everything, resolves nested relations, builds the JSON response). A single REST entry point (`GQLSERVICE`) fronts it all.
 
-**Tech Stack:** TLPP (namespace `custom.backoffice.graphql`), Protheus AppServer REST (`FWSetHeader`/`FWPrintHTML`/`GetParam`), JSON (`JsonParse`/`JsonSet`/`JsonStringify`), `FWExecStatement`/`ChangeQuery` for SQL, TIR/Python (pytest + `contrib.tir.Webapp`) for e2e tests, `~/.shared/protheus/compile/scripts/{compile.sh,compile-all.sh,deploy-rpo.sh}` (compile-protheus infra) for build/deploy.
+**Tech Stack:** TLPP (namespace `custom.backoffice.graphql`), Protheus AppServer REST (`@Get` annotation + implicit `oRest` — `tlpp-rest.th`), JSON (`JsonObject():New()`/`:FromJson()`/`:toJson()` + `json[key]` bracket access), `FWExecStatement`/`ChangeQuery` for SQL, TIR/Python (pytest + `contrib.tir.Webapp`) for e2e tests, `~/.shared/protheus/compile/scripts/{compile.sh,compile-all.sh,deploy-rpo.sh}` (compile-protheus infra) for build/deploy.
 
 **Spec:** `docs/superpowers/specs/2026-08-13-graphql-core-engine-design.md`
 
 ## Global Constraints
 
-- Every generated SQL query MUST include `%nolock%`, `<ALIAS>_FILIAL = xFilial('<ALIAS>')`, and `D_E_L_E_T_ = ' '` — never optional, never overridable by the caller (spec: Execução de queries).
+- Every generated SQL query MUST include the current branch filter (`<real filial field> = <current branch>`, see the Global Constraints note on the branch field/value below) and `D_E_L_E_T_ = ' '` — never optional, never overridable by the caller (spec: Execução de queries). The spec's `%nolock%` requirement is dropped in this plan: verified against the live server that this deployment's database backend is PostgreSQL (`appserver.ini`'s `[DBAccess] Database=POSTGRES`), `%nolock%` is a SQL Server-only table hint with no PostgreSQL equivalent (`ERROR: syntax error at or near "%"`, confirmed at runtime — `ChangeQuery()` does not translate or strip it either, it doubles the `%` instead and still fails), and PostgreSQL's MVCC gives every read a consistent snapshot without blocking on concurrent writers, which is what `%nolock%` exists to work around on SQL Server. Filial and soft-delete filtering (the actual data-correctness requirements) are unaffected and remain mandatory.
 - All SQL values from the client (filter values, `type`/table names used to look up dictionary rows) MUST go through bind parameters or `RetSqlName`/dictionary lookups — never string-concatenated into SQL (CLAUDE.md: SQL injection prevention; spec: Execução de queries).
 - Denied tables/fields (deny-list match) must never appear in introspection output, regardless of query shape (spec: Restrição de acesso, evaluated before the permission hook).
 - The permission hook (`AccessControl():AllowField`) must always return `.T.` in this sub-project (no real auth exists yet) and must be called from exactly one place so sub-project 3 (Auth) can wire it up without touching call sites (spec: Restrição de acesso).
@@ -29,6 +29,33 @@
 - **`Local`/`Private` declarations must all sit at the top of a function/method, before any executable statement** — a `local` after an `if`, loop, or assignment is a compile error (C2051 "LOCAL declaration follows executable statement"), not just a style preference. When a later task step adds a variable to an existing method (e.g. Task 4 extending `getType()`), add its `local` to the method's existing top-of-method block, never inline at the point of use.
 - **`IIF()` is forbidden** (this project's CLAUDE.md, SonarQube CA4000) — use explicit `If/Else/EndIf` and an intermediate local instead, even for a one-line conditional value.
 - These four rules were not caught by planning-time reasoning alone — they surfaced only once real compilation became available mid-Task-2. Every task below has already been corrected to follow them; an implementer who still hits a compile error from one of these categories should treat it as a plan bug to report, not something to route around silently.
+- **JSON API — verified empirically against the real running server** (containers `protheus`/`dbaccess`/`postgresql`/`license-server`, already running in this environment) during Task 3. The first draft of this plan used `JsonParse()`, `JsonSet()`, `JsonStringify()`, and `JsonGet()` — none of these functions exist in this Protheus build (confirmed at runtime: `InterFunctionCall: cannot find function JSONSTRINGIFY in AppMap`, same for `JsonParse`). The real API, confirmed working end-to-end against the live server:
+  - Create: `local oX as json` then `oX := JsonObject():New()` (or combined: `local oX := JsonObject():New() as json`). Do **not** initialize a fresh JSON object with a bare `{}` literal typed `as json` — an empty `{}` behaves as a plain array at runtime (`type mismatch in array subscriptor - expected N->C` when you then try `oX["key"] := ...`), not a JSON object. `JsonObject():New()` is always safe.
+  - Parse a string: `oX := JsonObject():New()` then `uErr := oX:FromJson(cSourceString)` — `uErr` is `Nil` (ValType `"U"`) on success, an error-message character string on failure. There is no standalone `JsonParse()` function.
+  - Read/write a property: `oX["key"]` and `oX["key"] := value` — plain bracket access, including chained/nested reads and writes (`oX["a"]["b"]`, `oArr[1]["x"]`) — this **is** supported and requires no change from what earlier drafts of this plan already did; only the construction/parsing/serialization calls needed to change.
+  - Serialize to a string: `oX:toJson()` — there is no standalone `JsonStringify()` function.
+  - Arrays of JSON objects: build with plain AdvPL arrays (`local aArr := {} as array`, `AAdd(aArr, oItem)`), then assign the whole array to a JSON property (`oParent["items"] := aArr`) — this works and round-trips through `:toJson()` correctly.
+  - Every class in this plan already reflects this — do not reintroduce `JsonParse`/`JsonSet`/`JsonStringify`/`JsonGet`.
+- **REST entry points use the `@Get` annotation, not a bare `User Function` read via `GetParam`** — verified empirically: a plain `User Function GQLSERVICE()` compiles fine but returns 404 at `/rest/graphql` (Protheus's REST framework, listening on port 9995 per `appserver.ini`'s `[HTTPREST]`, only routes annotated or `WSRESTFUL`-registered functions). The working pattern, confirmed against the live server (`docker exec protheus ...`, `curl http://localhost:9995/rest/graphql`) and matching this environment's own other REST sources (`BLUREST01.tlpp` in the shared compile image):
+  - `#include "tlpp-rest.th"` (in addition to `tlpp-core.th`/`totvs.ch`).
+  - `@Get("/path")` directly above `User Function Name() as logical`.
+  - Inside the function, an `oRest` variable is available **without being declared** — the `@Get` framework injects it into scope. Declaring `local oRest` shadows it and breaks the endpoint.
+  - Read query-string params: `oRest:getQueryRequest()` returns a `json`; read individual params via bracket access or `:GetJsonText("name")`.
+  - **`:GetJsonText("name")` returns the literal 4-character string `"null"` — not an empty string, not `Nil` — when `name` isn't present in the request.** Confirmed against the live server: `!empty(cQuery)` was `.T.` for a request with no `query` param at all, because `cQuery` held `"null"`. Every `:GetJsonText()` read of an optional query-string param must explicitly check `if cValue == "null" ... cValue := "" ... endif` before using `empty()`/`!empty()` on it. This gotcha is specific to `:GetJsonText()` — plain bracket access (`oX["key"]`) on a missing key correctly returns real `Nil` (`ValType` `"U"`) and needs no such guard; every `!= nil`/`== nil` check on parsed/constructed JSON elsewhere in this plan already relies on that and is unaffected.
+  - Send the response: `oRest:setStatusResponse(200, cJsonString)` (build `cJsonString` via `oX:toJson()`) — replaces `FWSetHeader`/`FWPrintHTML`, which are not part of this REST framework's response path.
+  - The entry point in this plan already reflects both of these.
+- **SQL execution uses `TCQuery ... New Alias &cAlias` (`topconn.ch`), not `FWExecStatement`** — verified empirically: `FWExecStatement` does not exist in this Protheus build (`InterFunctionCall: cannot find function FWEXECSTATEMENT in AppMap`, confirmed at runtime). The real, working pattern (matching this environment's own other REST/SQL sources):
+  - `#include "topconn.ch"` (in addition to `tlpp-core.th`/`totvs.ch`) in any file that runs a query.
+  - `local cAlq := GetNextAlias() as character` then `TCQuery cSql New Alias &cAlq` — the `&` (macro-expand) operator is required to use a *variable's* value as the alias; `Alias cAlq` (bare) or `Alias (cAlq)` both fail to compile/bind correctly. A literal alias (`Alias "SOMEALIAS"`) also works but a dynamic one is required here since query execution is recursive (nested relationship resolution) and needs a fresh alias per call.
+  - Workarea navigation after that (`(cAlq)->(dbGoTop())`, `(cAlq)->(dbSkip())`, `(cAlq)->(Eof())`, `(cAlq)->(dbCloseArea())`, `(cAlq)->(FieldGet(FieldPos(...)))`) is unchanged from earlier drafts of this plan and works as already written.
+  - **`TCQuery` has no bind-parameter mechanism** — it takes a single, fully-formed SQL string. Every value that reaches SQL text built by `GqlQueryBuilder` (the filial value, filter values, the parent-key value for nested relationship queries) MUST go through `GqlQueryBuilder():EscapeValue(cValue)` (single-quote doubling — `StrTran(cValue, "'", "''")`) and be wrapped in `'...'` — this replaces the bind-array design in earlier drafts of this plan. `ChangeQuery()` is dropped too (unneeded — `TCQuery` ran the plan's raw SQL correctly against the live server without it).
+  - Every file in this plan that executes SQL already reflects this.
+- **`RetSqlName("SX9")` and `RetSqlName("SIX")` returned empty strings against the live server this plan was verified against** — these dictionary tables aren't registered as physical tables in every Protheus deployment (unlike `SX2`/`SX3`, confirmed present and working). An empty `RetSqlName()` result concatenated straight into `" FROM " + cTable + " WHERE ..."` produces `FROM  WHERE ...` — a SQL syntax error (Postgres `42601`), not a graceful "no data" result. `getRelations()` and `getOrderKey()` in this plan both check `empty(RetSqlName(...))` first and degrade gracefully (empty relations list; scalar-field fallback for ordering) instead of running the malformed query — do not remove these guards as "unnecessary" defensive code. If a target deployment does have `SX9`/`SIX` registered, these same guards are harmless (the `if empty(...)` branch simply never triggers) — no environment-specific code path to maintain.
+- **A table's branch field is never `<table alias> + "_FILIAL"`** — verified against the live server: `SA1`'s real branch field is `A1_FILIAL` (`ERROR: column "sa1_filial" does not exist` when the naive guess was tried). The field prefix (here `A1`) is a per-table SX3 convention, not derivable from the table alias by string manipulation. `GqlDictionaryReader:getFilialField(cTable)` looks it up from SX3 (suffix match on `_FILIAL`) and every place that builds the mandatory filial filter uses its result — never reconstruct this field name from `cTable` directly.
+- **`xFilial()`/`FWxFilial()` return blank inside an `@Get`-annotated REST function in this environment** — verified against the live server: both returned `"  "` (empty/blank) even though the correct branch was demonstrably active (72 real `SA1` rows all have `A1_FILIAL = '01'`). The Public variable `cFilAnt` is reliably populated in this same context (confirmed `"01"`, matching `appserver.ini`'s `[HTTPURI] PrepareIn=99,01`) and is what this plan uses for the current-branch value in the mandatory filial filter — `GqlQueryBuilder:build()` reads `cFilAnt` directly, never `xFilial()`/`FWxFilial()`. `cEmpAnt` (current company) is populated too but this plan doesn't currently need it. This is scoped to the branch *value*; `GqlDictionaryReader:getFilialField()` (the branch *field name* lookup, previous bullet) is unrelated and still needed.
+- **`custom/backoffice/graphql/config/graphql-config.json` must be deployed to the AppServer's source path separately from the compiled RPO** — verified against the live server: `compile.sh`/`deploy-rpo.sh` only ever handle `.tlpp` sources compiled into `build/custom.rpo`; a loose `.json` resource file is never part of that RPO and `deploy-rpo.sh` does not copy it anywhere. Without it physically present on the server filesystem, `GqlConfig:new()`'s `MemoRead()` finds nothing, silently falls back to its empty built-in deny-list, and **every table becomes visible** — confirmed live: `SRA`/`SR5` (both explicitly deny-listed) appeared in `__schema.types` until the JSON file was copied to the same directory as the compiled sources (`/protheus12/apo/custom/backoffice/graphql/config/graphql-config.json` in this environment — i.e. the AppServer's `SourcePath` from `appserver.ini`'s `[P12] SourcePath=`), after which they correctly disappeared. This is a deployment step, not a code defect — `GqlConfig`'s graceful fallback-to-defaults behavior when the file is missing is intentional and stays as designed (spec: config loading). Task 10's README/deployment docs must call this out explicitly as a required manual step distinct from running `deploy-rpo.sh`, or the deny-list silently does nothing in production.
+- **AdvPL string literals do not process C-style backslash escapes** — a real authoring bug in an earlier draft of this plan's lexer, caught only by testing actual GraphQL string-literal parsing against the live server. Writing `cCh == "\""` to compare a character against a double-quote does not do what it looks like it does (the token comparison silently never matched, so every `"` in GraphQL query text fell through to a generic `PUNCT` token instead of starting a string literal, breaking every string argument/filter value). The fix, already applied everywhere in this plan: represent a `"` as a single-quoted literal (`'"'`) and a lone `\` the same way (`'\'`) — never rely on backslash-escaping inside a same-delimiter string. Any future edit to `GqlLexer:scanString()`/`scan()` must preserve this.
+- **`oArgs["filter"]` (and every other GraphQL argument value) is the AST *ValueNode wrapper* `{kind, value}`, not the raw value** — a real bug in an earlier draft of `GqlValidator:validateArguments()` and `GqlQueryBuilder:applyFilters()`, both of which did `local aFilters := oArgs["filter"] as array` and got a JSON object, not an array (`valtype()` never `"A"`, or a `nil`-vs-wrapper mismatch depending on the check). The correct access is `oArgs["filter"]["value"]` for the actual array — exactly the same unwrapping `resolveLimit()`/`resolveOffset()` already did correctly for `oArgs["limit"]["value"]`/`oArgs["offset"]["value"]`. Both fixed in this plan; confirmed live with a real filtered query (`filter: [{field: "A1_COD", op: "eq", value: "000001"}]`) returning exactly the one matching row.
 
 ---
 
@@ -99,7 +126,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
   - `GqlAccessControl():isFieldAllowed(cTable as character, cField as character) as logical`
   - `GqlAccessControl():allowField(cTable as character, cField as character, oUserContext as object) as logical` — permission hook, always `.T.` in this sub-project
 
-**Symbols to validate before compiling:** `MemoRead()`, `JsonParse()`, `JsonGet()`/`json[key]` accessor style used elsewhere in this codebase, `FWLogMsg()`.
+**Symbols to validate before compiling:** `MemoRead()`, `JsonObject():New()`/`:FromJson()`/`:toJson()`, `json[key]` bracket accessor, `FWLogMsg()` — all verified against the real running server, see the Global Constraints note on the JSON API.
 
 - [ ] **Step 1: Create the config file**
 
@@ -149,6 +176,7 @@ method new() as object class GqlConfig
     local cRaw     := "" as character
     local oJson    as json
     local oPag     as json
+    local uParseResult
 
     ::aDenyTables         := {}
     ::aDenyFields         := {}
@@ -162,8 +190,9 @@ method new() as object class GqlConfig
         return self
     endif
 
-    oJson := JsonParse(cRaw)
-    if valtype(oJson) != "J"
+    oJson := JsonObject():New()
+    uParseResult := oJson:FromJson(cRaw)
+    if valtype(uParseResult) != "U"
         FWLogMsg("GqlConfig: " + cPath + " is not valid JSON, using built-in defaults", .F.)
         return self
     endif
@@ -413,7 +442,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
   - REST endpoint `GET /graphql` (empty/no `query` and no `type` param) → schema names only
   - REST endpoint `GET /graphql?type=<TABLE>` → full type detail for one table
 
-**Symbols to validate before compiling:** `FWExecStatement()`, `RetSqlName()`, `GetNextAlias()`, `dbGoTop()`/`dbSkip()`/`Eof()`/`dbCloseArea()` workarea navigation, `FWSetHeader()`, `FWPrintHTML()`, `GetParam()`.
+**Symbols to validate before compiling:** `TCQuery ... New Alias &cAlias` (`topconn.ch`), `RetSqlName()`, `GetNextAlias()`, `dbGoTop()`/`dbSkip()`/`Eof()`/`dbCloseArea()` workarea navigation, `@Get` annotation + `oRest:getQueryRequest()`/`:setStatusResponse()` (`tlpp-rest.th`) — all verified against the real running server, see the Global Constraints notes on the JSON API, the REST entry point pattern, and SQL execution.
 
 - [ ] **Step 1: Write the TIR tests first (they will fail — no endpoint exists yet)**
 
@@ -521,6 +550,7 @@ class TestGraphQLDenylist:
 ```tlpp
 #include "tlpp-core.th"
 #include "totvs.ch"
+#include "topconn.ch"
 
 namespace custom.backoffice.graphql
 
@@ -560,14 +590,14 @@ method listTables() as array class GqlDictionaryReader
     local cAlias  := "" as character
     local oRow    as json
 
-    FWExecStatement(cAlq, ChangeQuery(cQuery))
+    TCQuery cQuery New Alias &cAlq
     (cAlq)->(dbGoTop())
     while !(cAlq)->(Eof())
         cAlias := alltrim((cAlq)->TALIAS)
         if ::oAccessControl:isTableAllowed(cAlias)
-            oRow := JsonParse("{}")
-            JsonSet(oRow, "alias", cAlias)
-            JsonSet(oRow, "name", alltrim((cAlq)->TNOME))
+            oRow := JsonObject():New()
+            oRow["alias"] := cAlias
+            oRow["name"] := alltrim((cAlq)->TNOME)
             aAdd(aResult, oRow)
         endif
         (cAlq)->(dbSkip())
@@ -597,15 +627,15 @@ method getTableFields(cTable as character) as array class GqlDictionaryReader
         return aResult
     endif
 
-    FWExecStatement(cAlq, ChangeQuery(cQuery))
+    TCQuery cQuery New Alias &cAlq
     (cAlq)->(dbGoTop())
     while !(cAlq)->(Eof())
         cField := alltrim((cAlq)->FCAMPO)
         if alltrim((cAlq)->FVISUAL) != "N" .and. ::oAccessControl:isFieldAllowed(cTable, cField)
-            oRow := JsonParse("{}")
-            JsonSet(oRow, "name", cField)
-            JsonSet(oRow, "sx3Type", alltrim((cAlq)->FTIPO))
-            JsonSet(oRow, "graphqlType", ::mapScalarType(alltrim((cAlq)->FTIPO), (cAlq)->FDECIMAL))
+            oRow := JsonObject():New()
+            oRow["name"] := cField
+            oRow["sx3Type"] := alltrim((cAlq)->FTIPO)
+            oRow["graphqlType"] := ::mapScalarType(alltrim((cAlq)->FTIPO), (cAlq)->FDECIMAL)
             aAdd(aResult, oRow)
         endif
         (cAlq)->(dbSkip())
@@ -682,7 +712,7 @@ method new(oDictionaryReader as object, oConfig as object) as object class GqlSc
     ::oDictionaryReader := oDictionaryReader
     ::oConfig           := oConfig
     ::aTableNamesCache  := nil
-    ::hTypeCache        := JsonParse("{}")
+    ::hTypeCache        := JsonObject():New()
     ::nCacheBuiltAt      := 0
     return self
 endmethod
@@ -735,10 +765,10 @@ method getType(cTable as character) as json class GqlSchemaProvider
     endif
 
     aFields := ::oDictionaryReader:getTableFields(cTable)
-    oType   := JsonParse("{}")
-    JsonSet(oType, "name", cTable)
-    JsonSet(oType, "fields", aFields)
-    JsonSet(oType, "relations", {})
+    oType   := JsonObject():New()
+    oType["name"] := cTable
+    oType["fields"] := aFields
+    oType["relations"] := {}
 
     ::hTypeCache[cTable] := oType
     return oType
@@ -752,7 +782,7 @@ endmethod
 /@*/
 method reload() as object class GqlSchemaProvider
     ::aTableNamesCache := nil
-    ::hTypeCache        := JsonParse("{}")
+    ::hTypeCache        := JsonObject():New()
     ::nCacheBuiltAt      := 0
     return self
 endmethod
@@ -777,29 +807,40 @@ Expected: compile succeeds.
 
 ```tlpp
 #include "tlpp-core.th"
+#include "tlpp-rest.th"
 #include "totvs.ch"
 
 /*/{Protheus.doc}
-User Function GQLSERVICE
-@type: Entry Point
-@ep: U_GQLSERVICE
-@param: None (reads HTTP GET params: query, type)
-@return: HTTP response with JSON body
-@doc: Dynamic GraphQL endpoint over the Protheus data dictionary.
-      GET /graphql              -> schema type names (deny-list applied)
-      GET /graphql?type=<TABLE> -> full type detail for one table
-      GET /graphql?query=<...>  -> full query execution (Task 9)
-      /{Protheus.doc}
-
-User Function GQLSERVICE()
+GQLSERVICE
+Dynamic GraphQL REST endpoint over the Protheus data dictionary.
+GET /rest/graphql              -> schema type names (deny-list applied)
+GET /rest/graphql?type=<TABLE> -> full type detail for one table
+GET /rest/graphql?query=<...>  -> full query execution (Task 9)
+@type User Function
+@author GraphQL Engine Team
+@since 3.0.0
+@return Logical - .T.
+/*/
+@Get("/graphql")
+User Function GQLSERVICE() as logical
     local oConfig    := custom.backoffice.graphql.GqlConfig():new()             as object
     local oAccess    := custom.backoffice.graphql.GqlAccessControl():new(oConfig) as object
     local oDict      := custom.backoffice.graphql.GqlDictionaryReader():new(oAccess) as object
     local oSchema    := custom.backoffice.graphql.GqlSchemaProvider():new(oDict, oConfig) as object
-    local cQuery     := GetParam("query", "") as character
-    local cTypeName  := GetParam("type", "")  as character
-    local oResult    := JsonParse("{}")         as json
-    local cJsonOut    := ""                       as character
+    local jParams    as json
+    local cQuery     := "" as character
+    local cTypeName  := "" as character
+    local oResult    as json
+
+    jParams   := oRest:getQueryRequest()
+    cQuery    := jParams:GetJsonText("query")
+    cTypeName := jParams:GetJsonText("type")
+    if cQuery == "null"
+        cQuery := ""
+    endif
+    if cTypeName == "null"
+        cTypeName := ""
+    endif
 
     if !empty(cQuery)
         // Wired in Task 9 (full parse/validate/execute pipeline).
@@ -810,13 +851,12 @@ User Function GQLSERVICE()
         oResult := custom.backoffice.graphql.GqlIntrospection():schemaNames(oSchema)
     endif
 
-    cJsonOut := JsonStringify(oResult)
+    oRest:setStatusResponse(200, oResult:toJson())
 
-    FWSetHeader("application/json", .T.)
-    FWPrintHTML(cJsonOut)
-
-Return
+Return .T.
 ```
+
+Note: `oRest` is not declared with `local` — it is injected into scope by the `@Get` REST framework for any function it annotates, matching this environment's own working REST examples. Declaring `local oRest` would shadow it and break the endpoint.
 
 - [ ] **Step 7: Write the small introspection + error helpers the entry point calls**
 
@@ -843,25 +883,25 @@ method schemaNames(oSchemaProvider as object) as json class GqlIntrospection
     local aNames := oSchemaProvider:listTableNames() as array
     local aTypes := {}                                 as array
     local nI     := 0                                    as numeric
-    local oData  := JsonParse("{}")                        as json
-    local oSchema := JsonParse("{}")                         as json
-    local oQType  := JsonParse("{}")                          as json
+    local oData  := JsonObject():New()                        as json
+    local oSchema := JsonObject():New()                         as json
+    local oQType  := JsonObject():New()                          as json
     local oType   as json
     local oResult as json
 
     for nI := 1 to len(aNames)
-        oType := JsonParse("{}")
-        JsonSet(oType, "name", aNames[nI])
+        oType := JsonObject():New()
+        oType["name"] := aNames[nI]
         aAdd(aTypes, oType)
     next nI
 
-    JsonSet(oQType, "name", "Query")
-    JsonSet(oSchema, "queryType", oQType)
-    JsonSet(oSchema, "types", aTypes)
-    JsonSet(oData, "__schema", oSchema)
+    oQType["name"] := "Query"
+    oSchema["queryType"] := oQType
+    oSchema["types"] := aTypes
+    oData["__schema"] := oSchema
 
-    oResult := JsonParse("{}")
-    JsonSet(oResult, "data", oData)
+    oResult := JsonObject():New()
+    oResult["data"] := oData
     return oResult
 endmethod
 
@@ -874,11 +914,11 @@ method typeDetail(oSchemaProvider as object, cTable as character) as json class 
         return GqlErrors():single("Unknown or restricted type: " + cTable)
     endif
 
-    oData := JsonParse("{}")
-    JsonSet(oData, "__type", oType)
+    oData := JsonObject():New()
+    oData["__type"] := oType
 
-    oResult := JsonParse("{}")
-    JsonSet(oResult, "data", oData)
+    oResult := JsonObject():New()
+    oResult["data"] := oData
     return oResult
 endmethod
 
@@ -915,13 +955,13 @@ method fromArray(aMessages as array) as json class GqlErrors
     local oResult as json
 
     for nI := 1 to len(aMessages)
-        oErr := JsonParse("{}")
-        JsonSet(oErr, "message", aMessages[nI])
+        oErr := JsonObject():New()
+        oErr["message"] := aMessages[nI]
         aAdd(aErrors, oErr)
     next nI
 
-    oResult := JsonParse("{}")
-    JsonSet(oResult, "errors", aErrors)
+    oResult := JsonObject():New()
+    oResult["errors"] := aErrors
     return oResult
 endmethod
 
@@ -1016,14 +1056,24 @@ Then add the implementation below the class's other method implementations
 method getRelations(cTable as character) as array class GqlDictionaryReader
     local aResult := {} as array
     local cAlq    := GetNextAlias() as character
-    local cQuery  := "SELECT X9_CDOM AS RTABLE, X9_EXPDOM AS RLOCAL, X9_EXPCDOM AS RFOREIGN, X9_LIGCDOM AS RCARD" + ;
-                      " FROM " + RetSqlName("SX9") + ;
-                      " WHERE D_E_L_E_T_ = ' ' AND X9_DOM = '" + cTable + "'" as character
+    local cSx9Table := RetSqlName("SX9") as character
+    local cQuery  := "" as character
     local cRelated := "" as character
     local oRow     as json
     local cCardinality := "" as character
 
-    FWExecStatement(cAlq, ChangeQuery(cQuery))
+    if empty(cSx9Table)
+        // ponytail: SX9 not registered in every Protheus deployment (confirmed
+        // empty RetSqlName against the live server this plan was verified
+        // against) - degrade to "no relations" instead of a malformed query.
+        return aResult
+    endif
+
+    cQuery := "SELECT X9_CDOM AS RTABLE, X9_EXPDOM AS RLOCAL, X9_EXPCDOM AS RFOREIGN, X9_LIGCDOM AS RCARD" + ;
+               " FROM " + cSx9Table + ;
+               " WHERE D_E_L_E_T_ = ' ' AND X9_DOM = '" + cTable + "'"
+
+    TCQuery cQuery New Alias &cAlq
     (cAlq)->(dbGoTop())
     while !(cAlq)->(Eof())
         cRelated := alltrim((cAlq)->RTABLE)
@@ -1032,11 +1082,11 @@ method getRelations(cTable as character) as array class GqlDictionaryReader
             if alltrim((cAlq)->RCARD) == "1"
                 cCardinality := "ONE"
             endif
-            oRow := JsonParse("{}")
-            JsonSet(oRow, "relatedTable", cRelated)
-            JsonSet(oRow, "localFields", alltrim((cAlq)->RLOCAL))
-            JsonSet(oRow, "foreignFields", alltrim((cAlq)->RFOREIGN))
-            JsonSet(oRow, "cardinality", cCardinality)
+            oRow := JsonObject():New()
+            oRow["relatedTable"] := cRelated
+            oRow["localFields"] := alltrim((cAlq)->RLOCAL)
+            oRow["foreignFields"] := alltrim((cAlq)->RFOREIGN)
+            oRow["cardinality"] := cCardinality
             aAdd(aResult, oRow)
         endif
         (cAlq)->(dbSkip())
@@ -1062,7 +1112,7 @@ existing top-of-method `local` block (alongside `aNames`, `oType`,
     local cRelType := "" as character
 ```
 
-Then replace `JsonSet(oType, "relations", {})` with (no `local` keywords here — they're all declared above now):
+Then replace `oType["relations"] := {}` with (no `local` keywords here — they're all declared above now):
 ```tlpp
         aRelations := ::oDictionaryReader:getRelations(cTable)
 
@@ -1071,14 +1121,14 @@ Then replace `JsonSet(oType, "relations", {})` with (no `local` keywords here �
             if aRelations[nJ]["cardinality"] == "MANY"
                 cRelType := "[" + aRelations[nJ]["relatedTable"] + "]"
             endif
-            oRel := JsonParse("{}")
-            JsonSet(oRel, "name", aRelations[nJ]["relatedTable"])
-            JsonSet(oRel, "type", cRelType)
-            JsonSet(oRel, "cardinality", aRelations[nJ]["cardinality"])
+            oRel := JsonObject():New()
+            oRel["name"] := aRelations[nJ]["relatedTable"]
+            oRel["type"] := cRelType
+            oRel["cardinality"] := aRelations[nJ]["cardinality"]
             aAdd(aRelationSummary, oRel)
         next nJ
 
-        JsonSet(oType, "relations", aRelationSummary)
+        oType["relations"] := aRelationSummary
 ```
 
 - [ ] **Step 5: Compile and deploy**
@@ -1204,7 +1254,7 @@ method scan() as json class GqlLexer
 
     if (cCh >= "a" .and. cCh <= "z") .or. (cCh >= "A" .and. cCh <= "Z") .or. cCh == "_"
         return ::scanName()
-    elseif cCh == "\""
+    elseif cCh == '"'
         return ::scanString()
     elseif (cCh >= "0" .and. cCh <= "9") .or. cCh == "-"
         return ::scanNumber()
@@ -1237,10 +1287,10 @@ method scanString() as json class GqlLexer
     ::nPos++ // opening quote
     while ::nPos <= ::nLen
         cCh := substr(::cSource, ::nPos, 1)
-        if cCh == "\""
+        if cCh == '"'
             ::nPos++
             return ::makeToken("STRING", cResult)
-        elseif cCh == "\\"
+        elseif cCh == '\'
             ::nPos++
             cCh := substr(::cSource, ::nPos, 1)
             if cCh == "n"
@@ -1289,9 +1339,9 @@ method scanNumber() as json class GqlLexer
 endmethod
 
 method makeToken(cKind as character, cValue as character) as json class GqlLexer
-    local oTok := JsonParse("{}") as json
-    JsonSet(oTok, "kind", cKind)
-    JsonSet(oTok, "value", cValue)
+    local oTok := JsonObject():New() as json
+    oTok["kind"] := cKind
+    oTok["value"] := cValue
     return oTok
 endmethod
 
@@ -1386,9 +1436,9 @@ method parse() as json class GqlParser
             endif
         enddo
 
-        oDoc := JsonParse("{}")
-        JsonSet(oDoc, "kind", "Document")
-        JsonSet(oDoc, "definitions", aDefs)
+        oDoc := JsonObject():New()
+        oDoc["kind"] := "Document"
+        oDoc["definitions"] := aDefs
         return oDoc
     endmethod
 
@@ -1406,10 +1456,10 @@ method parse() as json class GqlParser
             endif
         endif
 
-        oOp := JsonParse("{}")
-        JsonSet(oOp, "kind", "OperationDefinition")
-        JsonSet(oOp, "operation", cOp)
-        JsonSet(oOp, "selectionSet", ::parseSelectionSet())
+        oOp := JsonObject():New()
+        oOp["kind"] := "OperationDefinition"
+        oOp["operation"] := cOp
+        oOp["selectionSet"] := ::parseSelectionSet()
         return oOp
     endmethod
 
@@ -1452,7 +1502,7 @@ method parse() as json class GqlParser
             cName1 := oTok["value"]
         endif
 
-        oArgs := JsonParse("{}")
+        oArgs := JsonObject():New()
         if ::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == "("
             oArgs := ::parseArguments()
             if len(::aErrors) > 0
@@ -1460,23 +1510,23 @@ method parse() as json class GqlParser
             endif
         endif
 
-        oField := JsonParse("{}")
-        JsonSet(oField, "kind", "Field")
-        JsonSet(oField, "name", cName1)
+        oField := JsonObject():New()
+        oField["kind"] := "Field"
+        oField["name"] := cName1
         if cAlias != cName1
-            JsonSet(oField, "alias", cAlias)
+            oField["alias"] := cAlias
         endif
-        JsonSet(oField, "arguments", oArgs)
+        oField["arguments"] := oArgs
 
         if ::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == "{"
-            JsonSet(oField, "selectionSet", ::parseSelectionSet())
+            oField["selectionSet"] := ::parseSelectionSet()
         endif
 
         return oField
     endmethod
 
     method parseArguments() as json class GqlParser
-        local oArgs := JsonParse("{}") as json
+        local oArgs := JsonObject():New() as json
         local cName := "" as character
         local oTok  as json
 
@@ -1491,7 +1541,7 @@ method parse() as json class GqlParser
             if !::expectPunct(":")
                 return oArgs
             endif
-            JsonSet(oArgs, cName, ::parseValue())
+            oArgs[cName] := ::parseValue()
             if len(::aErrors) > 0
                 return oArgs
             endif
@@ -1505,31 +1555,31 @@ method parse() as json class GqlParser
         local oTok := ::oLexer:nextToken() as json
         local oVal as json
 
-        oVal := JsonParse("{}")
+        oVal := JsonObject():New()
 
         if oTok["kind"] == "STRING"
-            JsonSet(oVal, "kind", "StringValue")
-            JsonSet(oVal, "value", oTok["value"])
+            oVal["kind"] := "StringValue"
+            oVal["value"] := oTok["value"]
         elseif oTok["kind"] == "INT"
-            JsonSet(oVal, "kind", "IntValue")
-            JsonSet(oVal, "value", val(oTok["value"]))
+            oVal["kind"] := "IntValue"
+            oVal["value"] := val(oTok["value"])
         elseif oTok["kind"] == "FLOAT"
-            JsonSet(oVal, "kind", "FloatValue")
-            JsonSet(oVal, "value", val(oTok["value"]))
+            oVal["kind"] := "FloatValue"
+            oVal["value"] := val(oTok["value"])
         elseif oTok["kind"] == "NAME" .and. oTok["value"] == "true"
-            JsonSet(oVal, "kind", "BooleanValue")
-            JsonSet(oVal, "value", .T.)
+            oVal["kind"] := "BooleanValue"
+            oVal["value"] := .T.
         elseif oTok["kind"] == "NAME" .and. oTok["value"] == "false"
-            JsonSet(oVal, "kind", "BooleanValue")
-            JsonSet(oVal, "value", .F.)
+            oVal["kind"] := "BooleanValue"
+            oVal["value"] := .F.
         elseif oTok["kind"] == "NAME" .and. oTok["value"] == "null"
-            JsonSet(oVal, "kind", "NullValue")
+            oVal["kind"] := "NullValue"
         elseif oTok["kind"] == "PUNCT" .and. oTok["value"] == "["
-            JsonSet(oVal, "kind", "ListValue")
-            JsonSet(oVal, "value", ::parseValueList())
+            oVal["kind"] := "ListValue"
+            oVal["value"] := ::parseValueList()
         elseif oTok["kind"] == "PUNCT" .and. oTok["value"] == "{"
-            JsonSet(oVal, "kind", "ObjectValue")
-            JsonSet(oVal, "value", ::parseObjectValue())
+            oVal["kind"] := "ObjectValue"
+            oVal["value"] := ::parseObjectValue()
         else
             aAdd(::aErrors, "Unexpected value token: '" + oTok["value"] + "'")
         endif
@@ -1550,7 +1600,7 @@ method parse() as json class GqlParser
     endmethod
 
     method parseObjectValue() as json class GqlParser
-        local oObj  := JsonParse("{}") as json
+        local oObj  := JsonObject():New() as json
         local cName := "" as character
         local oTok  as json
 
@@ -1564,7 +1614,7 @@ method parse() as json class GqlParser
             if !::expectPunct(":")
                 return oObj
             endif
-            JsonSet(oObj, cName, ::parseValue())
+            oObj[cName] := ::parseValue()
             if len(::aErrors) > 0
                 return oObj
             endif
@@ -1747,14 +1797,16 @@ method validate(oDocument as json) as array class GqlValidator
     endmethod
 
     method validateArguments(oType as json, oArgs as json, aErrors as array) as object class GqlValidator
-        local aFilters := oArgs["filter"] as array
+        local oFilterArg := oArgs["filter"] as json
+        local aFilters   := {} as array
         local nI       := 0 as numeric
         local oFilter   as json
         local aValidOps := {"eq", "gt", "gte", "lt", "lte"} as array
 
-        if aFilters == nil
+        if oFilterArg == nil
             return self
         endif
+        aFilters := oFilterArg["value"]
         if valtype(aFilters) != "A"
             aAdd(aErrors, "Argument 'filter' must be a list")
             return self
@@ -1805,20 +1857,23 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
 - Consumes: `GqlConfig` (Task 2), AST field/arguments shape (Task 6).
 - Produces:
   - `GqlDictionaryReader():getOrderKey(cTable as character) as character` — comma-joined field list of SIX order `1` for `cTable` (falls back to the table's first scalar field if no SIX row exists)
+  - `GqlDictionaryReader():getFilialField(cTable as character) as character` — the real branch field name for `cTable` (e.g. `A1_FILIAL` for `SA1`), read from SX3 by suffix match. **Not** `cTable + "_FILIAL"` — verified against the live server that the field prefix and the table alias differ (`SA1`'s branch field is `A1_FILIAL`, confirmed via `ERROR: column "sa1_filial" does not exist` when the naive guess was tried).
   - `GqlQueryBuilder():new(oConfig as object) as object`
-  - `GqlQueryBuilder():build(cTable as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character, aExtraBinds as array) as json` — returns `{sql, binds}`; `cExtraWhere`/`aExtraBinds` let the executor inject the parent-key join condition for nested relationship queries (Task 9) without the query builder needing to know about relationships itself.
+  - `GqlQueryBuilder():build(cTable as character, cFilialField as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character) as character` — returns the full SQL text ready to run via `TCQuery`; `cFilialField` is the real branch column name (see `getFilialField` above); `cExtraWhere` lets the executor inject an already-escaped parent-key join condition for nested relationship queries (Task 9) without the query builder needing to know about relationships itself.
+  - `GqlQueryBuilder():EscapeValue(cValue as character) as character` (static) — single-quote doubling; the only sanctioned way any value reaches SQL text built by this class. This environment's query execution (`TCQuery`, from `topconn.ch`) has no bind-parameter support, so escaping replaces bind arrays as the injection-prevention mechanism (verified against the real server — see Global Constraints).
 
-**Symbols to validate before compiling:** `FWExecStatement()` bind-parameter syntax (this plan assumes `?` positional placeholders bound via the `aBinds` array passed to `FWExecStatement` — confirm the exact call shape against `language-system-docs-search` before relying on it), `xFilial()`, `RetSqlName()`.
+**Symbols to validate before compiling:** `StrTran()`, `cValToChar()`, `cFilAnt` (Public var), `RetSqlName()` — SQL execution, escaping and branch-value approach already verified against the real running server, see the Global Constraints notes on SQL execution and on `xFilial()`/`cFilAnt`.
 
-- [ ] **Step 1: Add `getOrderKey` to `core/dictionary-reader.tlpp`**
+- [ ] **Step 1: Add `getOrderKey` and `getFilialField` to `core/dictionary-reader.tlpp`**
 
-Add the declaration to the existing `class GqlDictionaryReader ... endclass` block:
+Add both declarations to the existing `class GqlDictionaryReader ... endclass` block:
 
 ```tlpp
     public method getOrderKey(cTable as character) as character
+    public method getFilialField(cTable as character) as character
 ```
 
-Then add the implementation below the class's other implementations (after
+Then add the implementations below the class's other implementations (after
 `getRelations`'s `endmethod`, before `endnamespace`):
 
 ```tlpp
@@ -1833,17 +1888,25 @@ Then add the implementation below the class's other implementations (after
 /@*/
 method getOrderKey(cTable as character) as character class GqlDictionaryReader
     local cAlq   := GetNextAlias() as character
-    local cQuery := "SELECT X6_CHAVE AS RKEY FROM " + RetSqlName("SIX") + ;
-                     " WHERE D_E_L_E_T_ = ' ' AND X6_ARQUIVO = '" + cTable + "' AND X6_ORDEM = '1'" as character
+    local cSixTable := RetSqlName("SIX") as character
+    local cQuery := "" as character
     local cKey   := "" as character
     local aFields as array
 
-    FWExecStatement(cAlq, ChangeQuery(cQuery))
-    (cAlq)->(dbGoTop())
-    if !(cAlq)->(Eof())
-        cKey := alltrim((cAlq)->RKEY)
+    if !empty(cSixTable)
+        // ponytail: SIX not registered in every Protheus deployment (confirmed
+        // empty RetSqlName against the live server this plan was verified
+        // against) - fall straight through to the scalar-field fallback below
+        // instead of running a malformed query.
+        cQuery := "SELECT X6_CHAVE AS RKEY FROM " + cSixTable + ;
+                   " WHERE D_E_L_E_T_ = ' ' AND X6_ARQUIVO = '" + cTable + "' AND X6_ORDEM = '1'"
+        TCQuery cQuery New Alias &cAlq
+        (cAlq)->(dbGoTop())
+        if !(cAlq)->(Eof())
+            cKey := alltrim((cAlq)->RKEY)
+        endif
+        (cAlq)->(dbCloseArea())
     endif
-    (cAlq)->(dbCloseArea())
 
     if !empty(cKey)
         return cKey
@@ -1854,6 +1917,38 @@ method getOrderKey(cTable as character) as character class GqlDictionaryReader
         return aFields[1]["name"]
     endif
     return ""
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Character - the real branch field name for cTable (e.g. "A1_FILIAL"),
+        found by suffix match against SX3, or "" if the table has none.
+        Queries SX3 directly (not via getTableFields()) since the branch
+        field is used internally for the mandatory filial filter and must
+        be found even if X3_VISUAL = "N" or it matches a denyFields pattern.
+/@*/
+method getFilialField(cTable as character) as character class GqlDictionaryReader
+    local cAlq    := GetNextAlias() as character
+    local cQuery  := "SELECT X3_CAMPO AS FCAMPO FROM " + RetSqlName("SX3") + ;
+                      " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = '" + cTable + "'" as character
+    local cField  := "" as character
+    local cResult := "" as character
+
+    TCQuery cQuery New Alias &cAlq
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cField := alltrim((cAlq)->FCAMPO)
+        if right(cField, 7) == "_FILIAL"
+            cResult := cField
+        endif
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+
+    return cResult
 endmethod
 ```
 
@@ -1875,9 +1970,15 @@ namespace custom.backoffice.graphql
 @author GraphQL Engine Team
 @since 3.0.0
 @desc GqlQueryBuilder - turns a table name, a scalar field list and parsed
-      GraphQL arguments into a bound, paginated SQL query. Every query
-      unconditionally gets %nolock%, filial and D_E_L_E_T_ = ' ' — the
-      caller cannot override or omit them.
+      GraphQL arguments into a paginated SQL query string. Every query
+      unconditionally gets the filial and D_E_L_E_T_ = ' ' filters — the
+      caller cannot override or omit them (this environment runs on
+      PostgreSQL, whose MVCC needs no lock hint on reads, so %nolock% is
+      not used here — see Global Constraints). This environment's query
+      execution path (`TCQuery ... New Alias &cAlias`, from `topconn.ch`)
+      has no bind-parameter support, so every value that reaches the SQL
+      text goes through EscapeValue() (single-quote doubling) first —
+      never raw string concatenation of client-supplied values.
       ponytail: pagination uses ROW_NUMBER() OVER (ORDER BY <SIX order 1>)
       wrapped in a subquery — portable across the SQL Server/Oracle/
       PostgreSQL backends Protheus targets. Add cursor pagination if
@@ -1887,13 +1988,13 @@ class GqlQueryBuilder
     private data oConfig as object
 
     public method new(oConfig as object) as object
-    public method build(cTable as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character, aExtraBinds as array) as json
+    public method build(cTable as character, cFilialField as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character) as character
     method resolveLimit(oArgs as json) as numeric
     method resolveOffset(oArgs as json) as numeric
-    method applyFilters(oArgs as json) as json
+    method applyFilters(oArgs as json) as character
     method opToSql(cOp as character) as character
     method joinFields(aFields as array) as character
-    method joinWithAnd(aClauses as array) as character
+    static method EscapeValue(cValue as character) as character
 endclass
 
 method new(oConfig as object) as object class GqlQueryBuilder
@@ -1906,47 +2007,47 @@ endmethod
 @author GraphQL Engine Team
 @since 3.0.0
 @param cTable Character - table alias
+@param cFilialField Character - the real branch field name for cTable
+       (e.g. "A1_FILIAL" for "SA1"; see GqlDictionaryReader:getFilialField()
+       — never the same as cTable + "_FILIAL", the field prefix and the
+       table alias are not the same string)
 @param aScalarFields Array - field names to select
 @param oArgs JSON - parsed GraphQL arguments (limit, offset, filter)
 @param cOrderKey Character - comma-joined ORDER BY field list
-@param cExtraWhere Character - additional WHERE clause with '?' binds,
-       or "" (used by the executor to scope nested relationship
-       queries to the parent row's key)
-@param aExtraBinds Array - bind values for cExtraWhere, in order
-@return JSON - {sql: Character, binds: Array}
+@param cExtraWhere Character - additional, already-safe WHERE fragment, or
+       "" (used by the executor to scope nested relationship queries to
+       the parent row's key; the executor is responsible for escaping any
+       value it interpolates there via EscapeValue())
+@return Character - the full, ready-to-run SQL text
 /@*/
-method build(cTable as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character, aExtraBinds as array) as json class GqlQueryBuilder
+method build(cTable as character, cFilialField as character, aScalarFields as array, oArgs as json, cOrderKey as character, cExtraWhere as character) as character class GqlQueryBuilder
         local nLimit   := ::resolveLimit(oArgs) as numeric
         local nOffset  := ::resolveOffset(oArgs) as numeric
-        local cWhere   := "D_E_L_E_T_ = ' ' AND " + cTable + "_FILIAL = ?" as character
-        local aBinds   := {xFilial(cTable)} as array
+        local cFilialEsc := GqlQueryBuilder():EscapeValue(cFilAnt) as character
+        local cWhere   := "D_E_L_E_T_ = ' '" as character
         local cSelect  := ::joinFields(aScalarFields) as character
-        local oFilterResult as json
+        local cFilterWhere as character
         local cSql     as character
-        local oResult  as json
 
-        oFilterResult := ::applyFilters(oArgs)
-        if !empty(oFilterResult["where"])
-            cWhere += " AND " + oFilterResult["where"]
-            aeval(oFilterResult["binds"], {|x| aAdd(aBinds, x)})
+        if !empty(cFilialField)
+            cWhere += " AND " + cFilialField + " = '" + cFilialEsc + "'"
+        endif
+
+        cFilterWhere := ::applyFilters(oArgs)
+        if !empty(cFilterWhere)
+            cWhere += " AND " + cFilterWhere
         endif
 
         if !empty(cExtraWhere)
             cWhere += " AND " + cExtraWhere
-            aeval(aExtraBinds, {|x| aAdd(aBinds, x)})
         endif
 
         cSql := "SELECT " + cSelect + " FROM (" + ;
                  "SELECT " + cSelect + ", ROW_NUMBER() OVER (ORDER BY " + cOrderKey + ") AS GQL_RN" + ;
-                 " FROM " + RetSqlName(cTable) + " %nolock% WHERE " + cWhere + ;
-                 ") GQL_PAGE WHERE GQL_RN > ? AND GQL_RN <= ?"
-        aAdd(aBinds, nOffset)
-        aAdd(aBinds, nOffset + nLimit)
+                 " FROM " + RetSqlName(cTable) + " WHERE " + cWhere + ;
+                 ") GQL_PAGE WHERE GQL_RN > " + cValToChar(nOffset) + " AND GQL_RN <= " + cValToChar(nOffset + nLimit)
 
-        oResult := JsonParse("{}")
-        JsonSet(oResult, "sql", ChangeQuery(cSql))
-        JsonSet(oResult, "binds", aBinds)
-        return oResult
+        return cSql
     endmethod
 
     method resolveLimit(oArgs as json) as numeric class GqlQueryBuilder
@@ -1967,35 +2068,36 @@ method build(cTable as character, aScalarFields as array, oArgs as json, cOrderK
         return 0
     endmethod
 
-    method applyFilters(oArgs as json) as json class GqlQueryBuilder
-        local aFilters := oArgs["filter"] as array
+    method applyFilters(oArgs as json) as character class GqlQueryBuilder
+        local oFilterArg := oArgs["filter"] as json
+        local aFilters := {} as array
         local aClauses := {} as array
-        local aBinds   := {} as array
         local nI       := 0 as numeric
         local oFilter  as json
         local cOp      as character
         local cSqlOp   as character
-        local oResult  as json
+        local cResult  := "" as character
 
-        oResult := JsonParse("{}")
-        JsonSet(oResult, "where", "")
-        JsonSet(oResult, "binds", aBinds)
-
-        if aFilters == nil
-            return oResult
+        if oFilterArg == nil
+            return ""
         endif
+        aFilters := oFilterArg["value"]
 
         for nI := 1 to len(aFilters)
             oFilter := aFilters[nI]["value"]
             cOp     := oFilter["op"]["value"]
             cSqlOp  := ::opToSql(cOp)
-            aAdd(aClauses, oFilter["field"]["value"] + " " + cSqlOp + " ?")
-            aAdd(aBinds, oFilter["value"]["value"])
+            aAdd(aClauses, oFilter["field"]["value"] + " " + cSqlOp + " '" + GqlQueryBuilder():EscapeValue(oFilter["value"]["value"]) + "'")
         next nI
 
-        JsonSet(oResult, "where", ::joinWithAnd(aClauses))
-        JsonSet(oResult, "binds", aBinds)
-        return oResult
+        for nI := 1 to len(aClauses)
+            if nI > 1
+                cResult += " AND "
+            endif
+            cResult += aClauses[nI]
+        next nI
+
+        return cResult
     endmethod
 
     method opToSql(cOp as character) as character class GqlQueryBuilder
@@ -2025,16 +2127,16 @@ method build(cTable as character, aScalarFields as array, oArgs as json, cOrderK
         return cResult
     endmethod
 
-    method joinWithAnd(aClauses as array) as character class GqlQueryBuilder
-        local cResult := "" as character
-        local nI      := 0 as numeric
-        for nI := 1 to len(aClauses)
-            if nI > 1
-                cResult += " AND "
-            endif
-            cResult += aClauses[nI]
-        next nI
-        return cResult
+    /*/{Protheus.doc}
+    @type Static Function
+    @author GraphQL Engine Team
+    @since 3.0.0
+    @param cValue Character - raw value to interpolate into a SQL string literal
+    @return Character - cValue with every single quote doubled, safe to wrap
+            in '...' in SQL text built by this class
+    /@*/
+    method EscapeValue(cValue as character) as character class GqlQueryBuilder
+        return StrTran(cValue, "'", "''")
     endmethod
 
 endnamespace
@@ -2072,7 +2174,7 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
   - `GqlExecutor():new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object`
   - `GqlExecutor():execute(cQuerySource as character) as json` — returns `{"data": {...}}` or `{"errors": [...]}`
 
-**Symbols to validate before compiling:** `FWExecStatement()` execution + row iteration (same call shape as Task 8's assumption — validate once, reuse), `xFilial()`.
+**Symbols to validate before compiling:** `TCQuery`/row iteration (same shape as Task 8's — validate once, reuse), `GqlDictionaryReader:getFilialField()`.
 
 - [ ] **Step 1: Write the TIR tests first (they will fail — real query execution isn't wired yet)**
 
@@ -2199,6 +2301,7 @@ Expected: FAIL — every real query returns `{"errors":[{"message":"query execut
 ```tlpp
 #include "tlpp-core.th"
 #include "totvs.ch"
+#include "topconn.ch"
 
 namespace custom.backoffice.graphql
 
@@ -2216,7 +2319,7 @@ class GqlExecutor
 
     public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object
     public method execute(cQuerySource as character) as json
-    method resolveTableField(oField as json, cExtraWhere as character, aExtraBinds as array) as array
+    method resolveTableField(oField as json, cExtraWhere as character) as array
     method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array
     method isScalarField(oType as json, cName as character) as logical
     method fieldNames(aSelection as array) as array
@@ -2259,17 +2362,17 @@ method execute(cQuerySource as character) as json class GqlExecutor
             return GqlErrors():fromArray(aValErrors)
         endif
 
-        oData := JsonParse("{}")
+        oData := JsonObject():New()
         aDefs := oDoc["definitions"]
         for nI := 1 to len(aDefs)
             aSel := aDefs[nI]["selectionSet"]
             for nJ := 1 to len(aSel)
-                JsonSet(oData, aSel[nJ]["name"], ::resolveTableField(aSel[nJ], "", {}))
+                oData[aSel[nJ]["name"]] := ::resolveTableField(aSel[nJ], "")
             next nJ
         next nI
 
-        oResult := JsonParse("{}")
-        JsonSet(oResult, "data", oData)
+        oResult := JsonObject():New()
+        oResult["data"] := oData
         return oResult
     endmethod
 
@@ -2278,12 +2381,12 @@ method execute(cQuerySource as character) as json class GqlExecutor
     @author GraphQL Engine Team
     @since 3.0.0
     @param oField JSON - Field AST node for a root or nested table field
-    @param cExtraWhere Character - parent-key WHERE fragment for nested calls, or ""
-    @param aExtraBinds Array - binds for cExtraWhere
+    @param cExtraWhere Character - already-safe (escaped) parent-key WHERE
+           fragment for nested calls, or ""
     @return Array - list of row objects (JSON), each with requested scalars
             and resolved nested relation lists
     /@*/
-    method resolveTableField(oField as json, cExtraWhere as character, aExtraBinds as array) as array class GqlExecutor
+    method resolveTableField(oField as json, cExtraWhere as character) as array class GqlExecutor
         local cTable       := oField["name"] as character
         local oType        := ::oSchemaProvider:getType(cTable) as json
         local aScalarSel   := {} as array
@@ -2291,7 +2394,8 @@ method execute(cQuerySource as character) as json class GqlExecutor
         local nI           := 0 as numeric
         local oSel         as json
         local cOrderKey    as character
-        local oQuery       as json
+        local cFilialField as character
+        local cSql         as character
         local aRows        := {} as array
         local cAlq         as character
         local oRow         as json
@@ -2306,19 +2410,20 @@ method execute(cQuerySource as character) as json class GqlExecutor
             endif
         next nI
 
-        cOrderKey := ::oDictionaryReader:getOrderKey(cTable)
-        oQuery    := ::oQueryBuilder:build(cTable, ::fieldNames(aScalarSel), oField["arguments"], cOrderKey, cExtraWhere, aExtraBinds)
+        cOrderKey    := ::oDictionaryReader:getOrderKey(cTable)
+        cFilialField := ::oDictionaryReader:getFilialField(cTable)
+        cSql         := ::oQueryBuilder:build(cTable, cFilialField, ::fieldNames(aScalarSel), oField["arguments"], cOrderKey, cExtraWhere)
 
         cAlq := GetNextAlias()
-        FWExecStatement(cAlq, oQuery["sql"], oQuery["binds"])
+        TCQuery cSql New Alias &cAlq
         (cAlq)->(dbGoTop())
         while !(cAlq)->(Eof())
-            oRow := JsonParse("{}")
+            oRow := JsonObject():New()
             for nI := 1 to len(aScalarSel)
-                JsonSet(oRow, ::fieldAlias(aScalarSel[nI]), (cAlq)->(FieldGet(FieldPos(aScalarSel[nI]["name"]))))
+                oRow[::fieldAlias(aScalarSel[nI])] := (cAlq)->(FieldGet(FieldPos(aScalarSel[nI]["name"])))
             next nI
             for nJ := 1 to len(aRelationSel)
-                JsonSet(oRow, aRelationSel[nJ]["name"], ::resolveRelation(oType, cTable, aRelationSel[nJ], oRow))
+                oRow[aRelationSel[nJ]["name"]] := ::resolveRelation(oType, cTable, aRelationSel[nJ], oRow)
             next nJ
             aAdd(aRows, oRow)
             (cAlq)->(dbSkip())
@@ -2334,6 +2439,7 @@ method execute(cQuerySource as character) as json class GqlExecutor
         local oRelMeta    as json
         local cLocalField  as character
         local cForeignField as character
+        local cLocalValue as character
 
         for nI := 1 to len(aRelations)
             if aRelations[nI]["relatedTable"] == oRelField["name"]
@@ -2348,8 +2454,9 @@ method execute(cQuerySource as character) as json class GqlExecutor
 
         cLocalField    := oRelMeta["localFields"]
         cForeignField  := oRelMeta["foreignFields"]
+        cLocalValue    := GqlQueryBuilder():EscapeValue(cValToChar(oParentRow[cLocalField]))
 
-        return ::resolveTableField(oRelField, cForeignField + " = ?", {oParentRow[cLocalField]})
+        return ::resolveTableField(oRelField, cForeignField + " = '" + cLocalValue + "'")
     endmethod
 
     method isScalarField(oType as json, cName as character) as logical class GqlExecutor
@@ -2402,7 +2509,7 @@ error, C2051 "LOCAL declaration follows executable statement"). Add
 ```tlpp
     local oExecutor  as object
 ```
-(alongside `oConfig`, `oAccess`, `oDict`, `oSchema`, `cQuery`, `cTypeName`, `oResult`, `cJsonOut`).
+(alongside `oConfig`, `oAccess`, `oDict`, `oSchema`, `jParams`, `cQuery`, `cTypeName`, `oResult`).
 
 Then replace:
 ```tlpp
@@ -2476,7 +2583,12 @@ running as a TLPP AppServer REST entry point.
 
 ## Configuration
 
-See `docs/configuration.md`.
+See `docs/configuration.md`. **`compile.sh`/`deploy-rpo.sh` only ever handle
+compiled `.tlpp` sources** — `custom/backoffice/graphql/config/graphql-config.json`
+must be copied to the AppServer's source path separately (same location as
+the compiled sources — check `appserver.ini`'s `[P12] SourcePath=`). Without
+it, the deny-list silently falls back to empty and every table becomes
+visible — confirmed against a live server during development.
 
 ## Architecture
 
