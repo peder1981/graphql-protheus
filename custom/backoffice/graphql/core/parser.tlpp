@@ -1,0 +1,248 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlParser - recursive-descent parser building a GraphQL AST (as JSON)
+      from a GqlLexer token stream.
+/@*/
+class GqlParser
+    private data oLexer  as object
+    private data aErrors as array
+
+    public method new(cSource as character) as object
+    public method getErrors() as array
+    public method parse() as json
+    method parseOperation() as json
+    method parseSelectionSet() as array
+    method parseField() as json
+    method parseArguments() as json
+    method parseValue() as json
+    method parseValueList() as array
+    method parseObjectValue() as json
+    method expectPunct(cExpected as character) as logical
+endclass
+
+method new(cSource as character) as object class GqlParser
+    ::oLexer  := GqlLexer():new(cSource)
+    ::aErrors := {}
+    return self
+endmethod
+
+method getErrors() as array class GqlParser
+    return ::aErrors
+endmethod
+
+method parse() as json class GqlParser
+        local aDefs := {} as array
+        local oDoc  as json
+
+        while ::oLexer:peek()["kind"] != "EOF"
+            aAdd(aDefs, ::parseOperation())
+            if len(::aErrors) > 0
+                return nil
+            endif
+        enddo
+
+        oDoc := JsonObject():New()
+        oDoc["kind"] := "Document"
+        oDoc["definitions"] := aDefs
+        return oDoc
+    endmethod
+
+    method parseOperation() as json class GqlParser
+        local oTok  := ::oLexer:peek() as json
+        local cOp   := "query" as character
+        local oOp   as json
+
+        if oTok["kind"] == "NAME" .and. (oTok["value"] == "query" .or. oTok["value"] == "mutation")
+            cOp := oTok["value"]
+            ::oLexer:nextToken()
+            oTok := ::oLexer:peek()
+            if oTok["kind"] == "NAME"
+                ::oLexer:nextToken() // optional operation name, discarded (not needed by the executor)
+            endif
+        endif
+
+        oOp := JsonObject():New()
+        oOp["kind"] := "OperationDefinition"
+        oOp["operation"] := cOp
+        oOp["selectionSet"] := ::parseSelectionSet()
+        return oOp
+    endmethod
+
+    method parseSelectionSet() as array class GqlParser
+        local aFields := {} as array
+
+        if !::expectPunct("{")
+            return aFields
+        endif
+
+        while ::oLexer:peek()["kind"] != "EOF" .and. !(::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == "}")
+            aAdd(aFields, ::parseField())
+            if len(::aErrors) > 0
+                return aFields
+            endif
+        enddo
+
+        ::expectPunct("}")
+        return aFields
+    endmethod
+
+    method parseField() as json class GqlParser
+        local oTok    := ::oLexer:nextToken() as json
+        local cName1  := "" as character
+        local cAlias  := "" as character
+        local oField  as json
+        local oArgs   as json
+
+        if oTok["kind"] != "NAME"
+            aAdd(::aErrors, "Expected field name, found '" + oTok["value"] + "'")
+            return nil
+        endif
+        cName1 := oTok["value"]
+        cAlias := cName1
+
+        if ::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == ":"
+            ::oLexer:nextToken()
+            oTok := ::oLexer:nextToken()
+            cAlias := cName1
+            cName1 := oTok["value"]
+        endif
+
+        oArgs := JsonObject():New()
+        if ::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == "("
+            oArgs := ::parseArguments()
+            if len(::aErrors) > 0
+                return nil
+            endif
+        endif
+
+        oField := JsonObject():New()
+        oField["kind"] := "Field"
+        oField["name"] := cName1
+        if cAlias != cName1
+            oField["alias"] := cAlias
+        endif
+        oField["arguments"] := oArgs
+
+        if ::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == "{"
+            oField["selectionSet"] := ::parseSelectionSet()
+        endif
+
+        return oField
+    endmethod
+
+    method parseArguments() as json class GqlParser
+        local oArgs := JsonObject():New() as json
+        local cName := "" as character
+        local oTok  as json
+
+        ::expectPunct("(")
+        while ::oLexer:peek()["kind"] != "EOF" .and. !(::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == ")")
+            oTok := ::oLexer:nextToken()
+            if oTok["kind"] != "NAME"
+                aAdd(::aErrors, "Expected argument name, found '" + oTok["value"] + "'")
+                return oArgs
+            endif
+            cName := oTok["value"]
+            if !::expectPunct(":")
+                return oArgs
+            endif
+            oArgs[cName] := ::parseValue()
+            if len(::aErrors) > 0
+                return oArgs
+            endif
+        enddo
+        ::expectPunct(")")
+
+        return oArgs
+    endmethod
+
+    method parseValue() as json class GqlParser
+        local oTok := ::oLexer:nextToken() as json
+        local oVal as json
+
+        oVal := JsonObject():New()
+
+        if oTok["kind"] == "STRING"
+            oVal["kind"] := "StringValue"
+            oVal["value"] := oTok["value"]
+        elseif oTok["kind"] == "INT"
+            oVal["kind"] := "IntValue"
+            oVal["value"] := val(oTok["value"])
+        elseif oTok["kind"] == "FLOAT"
+            oVal["kind"] := "FloatValue"
+            oVal["value"] := val(oTok["value"])
+        elseif oTok["kind"] == "NAME" .and. oTok["value"] == "true"
+            oVal["kind"] := "BooleanValue"
+            oVal["value"] := .T.
+        elseif oTok["kind"] == "NAME" .and. oTok["value"] == "false"
+            oVal["kind"] := "BooleanValue"
+            oVal["value"] := .F.
+        elseif oTok["kind"] == "NAME" .and. oTok["value"] == "null"
+            oVal["kind"] := "NullValue"
+        elseif oTok["kind"] == "PUNCT" .and. oTok["value"] == "["
+            oVal["kind"] := "ListValue"
+            oVal["value"] := ::parseValueList()
+        elseif oTok["kind"] == "PUNCT" .and. oTok["value"] == "{"
+            oVal["kind"] := "ObjectValue"
+            oVal["value"] := ::parseObjectValue()
+        else
+            aAdd(::aErrors, "Unexpected value token: '" + oTok["value"] + "'")
+        endif
+
+        return oVal
+    endmethod
+
+    method parseValueList() as array class GqlParser
+        local aVals := {} as array
+        while ::oLexer:peek()["kind"] != "EOF" .and. !(::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == "]")
+            aAdd(aVals, ::parseValue())
+            if len(::aErrors) > 0
+                return aVals
+            endif
+        enddo
+        ::expectPunct("]")
+        return aVals
+    endmethod
+
+    method parseObjectValue() as json class GqlParser
+        local oObj  := JsonObject():New() as json
+        local cName := "" as character
+        local oTok  as json
+
+        while ::oLexer:peek()["kind"] != "EOF" .and. !(::oLexer:peek()["kind"] == "PUNCT" .and. ::oLexer:peek()["value"] == "}")
+            oTok := ::oLexer:nextToken()
+            if oTok["kind"] != "NAME"
+                aAdd(::aErrors, "Expected field name in object value, found '" + oTok["value"] + "'")
+                return oObj
+            endif
+            cName := oTok["value"]
+            if !::expectPunct(":")
+                return oObj
+            endif
+            oObj[cName] := ::parseValue()
+            if len(::aErrors) > 0
+                return oObj
+            endif
+        enddo
+        ::expectPunct("}")
+
+        return oObj
+    endmethod
+
+    method expectPunct(cExpected as character) as logical class GqlParser
+        local oTok := ::oLexer:nextToken() as json
+        if oTok["kind"] != "PUNCT" .or. oTok["value"] != cExpected
+            aAdd(::aErrors, "Expected '" + cExpected + "' but found '" + oTok["value"] + "'")
+            return .F.
+        endif
+        return .T.
+    endmethod
+
+endnamespace
