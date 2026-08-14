@@ -1,0 +1,173 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlLexer - tokenizes GraphQL query text into {kind, value} tokens.
+      kind: NAME, INT, FLOAT, STRING, PUNCT, EOF.
+/@*/
+class GqlLexer
+    private data cSource     as character
+    private data nPos        as numeric
+    private data nLen        as numeric
+    private data oPeeked     as json
+
+    public method new(cSource as character) as object
+    public method peek() as json
+    public method nextToken() as json
+    method skipIgnored() as object
+    method scan() as json
+    method scanName() as json
+    method scanString() as json
+    method scanNumber() as json
+    method makeToken(cKind as character, cValue as character) as json
+endclass
+
+method new(cSource as character) as object class GqlLexer
+    ::cSource := cSource
+    ::nPos    := 1
+    ::nLen    := len(cSource)
+    ::oPeeked := nil
+    return self
+endmethod
+
+method peek() as json class GqlLexer
+    if ::oPeeked == nil
+        ::oPeeked := ::scan()
+    endif
+    return ::oPeeked
+endmethod
+
+method nextToken() as json class GqlLexer
+    local oTok := ::peek() as json
+    ::oPeeked := nil
+    return oTok
+endmethod
+
+method skipIgnored() as object class GqlLexer
+    local cCh := "" as character
+    while ::nPos <= ::nLen
+        cCh := substr(::cSource, ::nPos, 1)
+        if cCh == " " .or. cCh == chr(9) .or. cCh == chr(10) .or. cCh == chr(13) .or. cCh == ","
+            ::nPos++
+        elseif cCh == "#"
+            while ::nPos <= ::nLen .and. substr(::cSource, ::nPos, 1) != chr(10)
+                ::nPos++
+            enddo
+        else
+            exit
+        endif
+    enddo
+    return self
+endmethod
+
+method scan() as json class GqlLexer
+    local cCh   := "" as character
+    local oTok  as json
+
+    ::skipIgnored()
+
+    if ::nPos > ::nLen
+        return ::makeToken("EOF", "")
+    endif
+
+    cCh := substr(::cSource, ::nPos, 1)
+
+    if (cCh >= "a" .and. cCh <= "z") .or. (cCh >= "A" .and. cCh <= "Z") .or. cCh == "_"
+        return ::scanName()
+    elseif cCh == '"'
+        return ::scanString()
+    elseif (cCh >= "0" .and. cCh <= "9") .or. cCh == "-"
+        return ::scanNumber()
+    endif
+
+    ::nPos++
+    return ::makeToken("PUNCT", cCh)
+endmethod
+
+method scanName() as json class GqlLexer
+    local nStart := ::nPos as numeric
+    local cCh    := "" as character
+
+    while ::nPos <= ::nLen
+        cCh := substr(::cSource, ::nPos, 1)
+        if (cCh >= "a" .and. cCh <= "z") .or. (cCh >= "A" .and. cCh <= "Z") .or. (cCh >= "0" .and. cCh <= "9") .or. cCh == "_"
+            ::nPos++
+        else
+            exit
+        endif
+    enddo
+
+    return ::makeToken("NAME", substr(::cSource, nStart, ::nPos - nStart))
+endmethod
+
+method scanString() as json class GqlLexer
+    local cResult := "" as character
+    local cCh     := "" as character
+
+    ::nPos++ // opening quote
+    while ::nPos <= ::nLen
+        cCh := substr(::cSource, ::nPos, 1)
+        if cCh == '"'
+            ::nPos++
+            return ::makeToken("STRING", cResult)
+        elseif cCh == '\'
+            ::nPos++
+            cCh := substr(::cSource, ::nPos, 1)
+            if cCh == "n"
+                cResult += chr(10)
+            elseif cCh == "t"
+                cResult += chr(9)
+            else
+                cResult += cCh
+            endif
+            ::nPos++
+        else
+            cResult += cCh
+            ::nPos++
+        endif
+    enddo
+
+    return ::makeToken("STRING", cResult) // unterminated: parser reports the error
+endmethod
+
+method scanNumber() as json class GqlLexer
+    local nStart  := ::nPos as numeric
+    local lFloat  := .F.     as logical
+    local cCh     := ""       as character
+    local cKind   := "INT"     as character
+
+    if substr(::cSource, ::nPos, 1) == "-"
+        ::nPos++
+    endif
+    while ::nPos <= ::nLen
+        cCh := substr(::cSource, ::nPos, 1)
+        if cCh >= "0" .and. cCh <= "9"
+            ::nPos++
+        elseif cCh == "." .and. !lFloat
+            lFloat := .T.
+            ::nPos++
+        else
+            exit
+        endif
+    enddo
+
+    if lFloat
+        cKind := "FLOAT"
+    endif
+
+    return ::makeToken(cKind, substr(::cSource, nStart, ::nPos - nStart))
+endmethod
+
+method makeToken(cKind as character, cValue as character) as json class GqlLexer
+    local oTok := JsonObject():New() as json
+    oTok["kind"] := cKind
+    oTok["value"] := cValue
+    return oTok
+endmethod
+
+endnamespace
