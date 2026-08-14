@@ -57,6 +57,8 @@
 - **Every task's compile step must (re-)compile every `.tlpp` file it depends on, not only its own new/modified files, if it starts from a fresh `protheus-compile` container** — the compiled RPO (`build/custom.rpo`) only contains classes from files actually compiled into *that* container's session; a fresh container (e.g. a new implementer dispatch after `docker rm -f protheus-compile`) does not retain earlier tasks' compiled classes even though the source files are already committed to git. Confirmed during Task 3: a fresh container needed Task 2's `config.tlpp`/`access-control.tlpp` recompiled before Task 3's files (which reference `GqlConfig`/`GqlAccessControl`) would run without an "invalid class" error. Recompiling an already-correct upstream file is harmless and fast — when in doubt, recompile the full dependency chain for the task at hand.
 - **AdvPL string literals do not process C-style backslash escapes** — a real authoring bug in an earlier draft of this plan's lexer, caught only by testing actual GraphQL string-literal parsing against the live server. Writing `cCh == "\""` to compare a character against a double-quote does not do what it looks like it does (the token comparison silently never matched, so every `"` in GraphQL query text fell through to a generic `PUNCT` token instead of starting a string literal, breaking every string argument/filter value). The fix, already applied everywhere in this plan: represent a `"` as a single-quoted literal (`'"'`) and a lone `\` the same way (`'\'`) — never rely on backslash-escaping inside a same-delimiter string. Any future edit to `GqlLexer:scanString()`/`scan()` must preserve this.
 - **`oArgs["filter"]` (and every other GraphQL argument value) is the AST *ValueNode wrapper* `{kind, value}`, not the raw value** — a real bug in an earlier draft of `GqlValidator:validateArguments()` and `GqlQueryBuilder:applyFilters()`, both of which did `local aFilters := oArgs["filter"] as array` and got a JSON object, not an array (`valtype()` never `"A"`, or a `nil`-vs-wrapper mismatch depending on the check). The correct access is `oArgs["filter"]["value"]` for the actual array — exactly the same unwrapping `resolveLimit()`/`resolveOffset()` already did correctly for `oArgs["limit"]["value"]`/`oArgs["offset"]["value"]`. Both fixed in this plan; confirmed live with a real filtered query (`filter: [{field: "A1_COD", op: "eq", value: "000001"}]`) returning exactly the one matching row.
+- **A filter value's `value` node can be numeric or logical, not only a string** — found by the final whole-branch review, not caught live because every tested filter happened to target a character field. `GqlQueryBuilder:applyFilters()`'s `EscapeValue(oFilter["value"]["value"])` call passes that raw value straight to `EscapeValue(cValue as character)` — a compiler type-mismatch risk the moment a client filters on a numeric/decimal/logical field. `GqlExecutor:resolveRelation()` already gets this right (`EscapeValue(cValToChar(oParentRow[cLocalField]))`) — `applyFilters()` must wrap the same way: `EscapeValue(cValToChar(oFilter["value"]["value"]))`.
+- **GraphQL aliases must be honored at every selection depth, not only on scalar leaf fields** — found by the final whole-branch review. `GqlParser:parseField()` computes an `alias` for every field uniformly (root, relation, and leaf), and `GqlExecutor:fieldAlias()` exists to read it, but only `resolveTableField()`'s scalar-field loop actually called it. `execute()`'s root-field loop and `resolveTableField()`'s relation-field loop both keyed their JSON output on the raw field `name` instead — silently dropping the alias, so a query requesting the same root table twice with two aliases (a standard GraphQL pattern, e.g. `{ recent: SA1(...) {...} old: SA1(...) {...} }`) collides on one JSON key and the second selection silently overwrites the first. Both loops now call `::fieldAlias(...)` instead of reading `["name"]` directly, consistent with the scalar-field loop that already did this correctly.
 
 ---
 
@@ -2088,7 +2090,7 @@ method build(cTable as character, cFilialField as character, aScalarFields as ar
             oFilter := aFilters[nI]["value"]
             cOp     := oFilter["op"]["value"]
             cSqlOp  := ::opToSql(cOp)
-            aAdd(aClauses, oFilter["field"]["value"] + " " + cSqlOp + " '" + GqlQueryBuilder():EscapeValue(oFilter["value"]["value"]) + "'")
+            aAdd(aClauses, oFilter["field"]["value"] + " " + cSqlOp + " '" + GqlQueryBuilder():EscapeValue(cValToChar(oFilter["value"]["value"])) + "'")
         next nI
 
         for nI := 1 to len(aClauses)
@@ -2368,7 +2370,7 @@ method execute(cQuerySource as character) as json class GqlExecutor
         for nI := 1 to len(aDefs)
             aSel := aDefs[nI]["selectionSet"]
             for nJ := 1 to len(aSel)
-                oData[aSel[nJ]["name"]] := ::resolveTableField(aSel[nJ], "")
+                oData[::fieldAlias(aSel[nJ])] := ::resolveTableField(aSel[nJ], "")
             next nJ
         next nI
 
@@ -2424,7 +2426,7 @@ method execute(cQuerySource as character) as json class GqlExecutor
                 oRow[::fieldAlias(aScalarSel[nI])] := (cAlq)->(FieldGet(FieldPos(aScalarSel[nI]["name"])))
             next nI
             for nJ := 1 to len(aRelationSel)
-                oRow[aRelationSel[nJ]["name"]] := ::resolveRelation(oType, cTable, aRelationSel[nJ], oRow)
+                oRow[::fieldAlias(aRelationSel[nJ])] := ::resolveRelation(oType, cTable, aRelationSel[nJ], oRow)
             next nJ
             aAdd(aRows, oRow)
             (cAlq)->(dbSkip())
