@@ -25,7 +25,7 @@ class GqlMutationExecutor
     method splitFieldName(cName as character) as json
     method keyFieldNames(cTable as character) as array
     method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as array) as array
-    method fetchByKey(cTable as character, oField as json, oInput as json, aKeyFields as array) as array
+    method fetchByKey(cTable as character, oField as json, oInput as json, aKeyFields as array, cFilialField as character) as array
 endclass
 
 method new(oMutationSchema as object, oDictionaryReader as object, oInputValidator as object, oMutationBuilder as object, oExecutor as object) as object class GqlMutationExecutor
@@ -98,7 +98,10 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
     local aSetFields as array
     local aFields   as array
     local aFieldNames as array
+    local aInputNames as array
     local nI        := 0 as numeric
+    local nK        := 0 as numeric
+    local cKeyName  := "" as character
     local cFilialField as character
     local cSql      as character
     local nStat     := 0 as numeric
@@ -122,6 +125,12 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
         return GqlErrors():single("Mutation '" + oField["name"] + "' requires an 'input' argument")
     endif
     oInput := oInputArg["value"]
+
+    aInputNames := oInput:GetNames()
+    for nK := 1 to len(aInputNames)
+        cKeyName := aInputNames[nK]
+        oInput[cKeyName] := oInput[cKeyName]["value"]
+    next nK
 
     cAlias := oField["name"]
     if oField["alias"] != nil
@@ -148,7 +157,7 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
         if nStat < 0
             return GqlErrors():single("Write failed for '" + oField["name"] + "'")
         endif
-        aRows := ::fetchByKey(cTable, oField, oInput, aKeyFields)
+        aRows := ::fetchByKey(cTable, oField, oInput, aKeyFields, cFilialField)
         oOut := JsonObject():New()
         oOut["alias"] := cAlias
         if len(aRows) > 0
@@ -164,7 +173,7 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
                 return GqlErrors():single("Missing key field '" + aKeyFields[nI] + "' for update")
             endif
         next nI
-        aExisting := ::fetchByKey(cTable, oField, oInput, aKeyFields)
+        aExisting := ::fetchByKey(cTable, oField, oInput, aKeyFields, cFilialField)
         if len(aExisting) == 0
             return GqlErrors():single("Row not found for update")
         endif
@@ -181,7 +190,7 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
         if nStat < 0
             return GqlErrors():single("Write failed for '" + oField["name"] + "'")
         endif
-        aRows := ::fetchByKey(cTable, oField, oInput, aKeyFields)
+        aRows := ::fetchByKey(cTable, oField, oInput, aKeyFields, cFilialField)
         oOut := JsonObject():New()
         oOut["alias"] := cAlias
         if len(aRows) > 0
@@ -197,7 +206,7 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
                 return GqlErrors():single("Missing key field '" + aKeyFields[nI] + "' for delete")
             endif
         next nI
-        aExisting := ::fetchByKey(cTable, oField, oInput, aKeyFields)
+        aExisting := ::fetchByKey(cTable, oField, oInput, aKeyFields, cFilialField)
         if len(aExisting) == 0
             return GqlErrors():single("Row not found for delete")
         endif
@@ -291,18 +300,42 @@ endmethod
       selectionSet, using the existing read-path executor
       (GqlExecutor:resolveTableField) - never duplicates row-fetch logic.
 /@*/
-method fetchByKey(cTable as character, oField as json, oInput as json, aKeyFields as array) as array class GqlMutationExecutor
+method fetchByKey(cTable as character, oField as json, oInput as json, aKeyFields as array, cFilialField as character) as array class GqlMutationExecutor
     local cWhere := "" as character
     local nI     := 0 as numeric
+    local oSynthField as json
+    local cKeyValue as character
 
     for nI := 1 to len(aKeyFields)
         if nI > 1
             cWhere += " AND "
         endif
-        cWhere += aKeyFields[nI] + " = '" + GqlQueryBuilder():EscapeValue(cValToChar(oInput[aKeyFields[nI]])) + "'"
+        // The filial key field is never taken from oInput - create mutations
+        // are not required to supply it (it is always forced from cFilAnt,
+        // exactly like GqlMutationBuilder does for INSERT/UPDATE/DELETE WHERE
+        // clauses). Update/delete do require it in oInput (validated by the
+        // caller), but forcing cFilAnt here keeps the same-branch guarantee
+        // consistent for every operation.
+        if !empty(cFilialField) .and. aKeyFields[nI] == cFilialField
+            cKeyValue := cFilAnt
+        else
+            cKeyValue := cValToChar(oInput[aKeyFields[nI]])
+        endif
+        cWhere += aKeyFields[nI] + " = '" + GqlQueryBuilder():EscapeValue(cKeyValue) + "'"
     next nI
 
-    return ::oExecutor:resolveTableField(oField, cWhere)
+    // oField is the mutation root field (e.g. "createSA1"/"updateSA1"/"deleteSA1"):
+    // its own name is NOT the table name, only its selectionSet is reusable here.
+    // GqlExecutor:resolveTableField derives the table from oField["name"], so a
+    // synthetic field node naming the real table (cTable) must be built, reusing
+    // oField's selectionSet and an empty arguments object (no filter/limit/offset
+    // should leak in from the mutation's own "input" argument).
+    oSynthField := JsonObject():New()
+    oSynthField["name"] := cTable
+    oSynthField["selectionSet"] := oField["selectionSet"]
+    oSynthField["arguments"] := JsonObject():New()
+
+    return ::oExecutor:resolveTableField(oSynthField, cWhere)
 endmethod
 
 endnamespace

@@ -41,9 +41,10 @@ endmethod
 @return Character - full INSERT statement text
 /@*/
 method buildInsert(cTable as character, cFilialField as character, oInput as json, aFieldNames as array) as character class GqlMutationBuilder
-    local cCols   := "" as character
-    local cVals   := "" as character
-    local nI      := 0 as numeric
+    local cCols     := "" as character
+    local cVals     := "" as character
+    local nI        := 0 as numeric
+    local cSqlTable := RetSqlName(cTable) as character
 
     for nI := 1 to len(aFieldNames)
         if nI > 1
@@ -55,11 +56,26 @@ method buildInsert(cTable as character, cFilialField as character, oInput as jso
     next nI
 
     if !empty(cFilialField)
-        cCols += ", " + cFilialField
-        cVals += ", '" + GqlQueryBuilder():EscapeValue(cFilAnt) + "'"
+        if !empty(cCols)
+            cCols += ", "
+            cVals += ", "
+        endif
+        cCols += cFilialField
+        cVals += "'" + GqlQueryBuilder():EscapeValue(cFilAnt) + "'"
     endif
 
-    return "INSERT INTO " + RetSqlName(cTable) + " (" + cCols + ") VALUES (" + cVals + ")"
+    // R_E_C_N_O_ is this table's primary key and defaults to 0 at the SQL
+    // level - raw INSERT bypasses the ISAM/DBAccess layer that normally
+    // assigns it, so it must be computed here or every row after the first
+    // collides on the same PK value.
+    if !empty(cCols)
+        cCols += ", "
+        cVals += ", "
+    endif
+    cCols += "R_E_C_N_O_"
+    cVals += "(SELECT COALESCE(MAX(R_E_C_N_O_), 0) + 1 FROM " + cSqlTable + ")"
+
+    return "INSERT INTO " + cSqlTable + " (" + cCols + ") VALUES (" + cVals + ")"
 endmethod
 
 /*/{Protheus.doc}
