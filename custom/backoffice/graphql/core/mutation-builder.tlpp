@@ -39,6 +39,60 @@ endmethod
 @param aFieldNames Array - field names to insert, from oInput's keys
        (the caller already filtered this to known/allowed fields)
 @return Character - full INSERT statement text
+@desc KNOWN CONCURRENCY LIMITATION - R_E_C_N_O_ assignment is NOT race-free.
+
+      R_E_C_N_O_ is this table's physical primary key. A raw SQL INSERT
+      bypasses the ISAM/DBAccess layer that normally assigns it atomically,
+      so this method computes it itself as
+      "(SELECT COALESCE(MAX(R_E_C_N_O_), 0) + 1 FROM <table>)" inline in the
+      INSERT statement. Two concurrent createXxx requests on separate DB
+      connections can both evaluate this subquery against the same
+      committed MAX before either one's INSERT commits, and both then try
+      to insert the same R_E_C_N_O_ value - a classic TOCTOU race.
+
+      Two fixes were investigated and rejected before accepting this
+      limitation (checked 2026-08-14 against the live Postgres backend):
+
+      1. Real sequence/IDENTITY column default. Checked information_schema
+         for sa1990/sb1990 (and scanned all 1134 sequences in the
+         database): R_E_C_N_O_ on dictionary-backed tables (SA1, SB1, ...)
+         has a plain literal DEFAULT of 0, not a sequence or IDENTITY -
+         pg_get_serial_sequence('sa1990','r_e_c_n_o_') returns NULL. Only
+         framework-internal tables (sys_*, mpmenu_*, env_*) have real
+         "<table>_r_e_c_n_o__seq" sequences. No usable sequence exists for
+         GraphQL-exposed dictionary tables, so "omit R_E_C_N_O_ from the
+         INSERT and let the default handle it" is not available here.
+
+      2. Postgres advisory lock folded into the same INSERT statement, e.g.
+         "(SELECT COALESCE(MAX(r_e_c_n_o_),0)+1 FROM t WHERE
+         pg_advisory_xact_lock(hashtext('t')) IS NOT NULL)". This was
+         reproduced-tested directly against Postgres (two concurrent
+         sessions, pg_sleep widening the race window) and it does NOT
+         prevent the collision: under the server's default READ COMMITTED
+         isolation, a single top-level SQL command takes ONE snapshot at
+         the start of the command, before the advisory-lock wait resolves.
+         The blocked session, once unblocked, still aggregates MAX() against
+         the pre-lock snapshot, so it computes the same stale value the
+         first session used - both sessions still collide. Confirmed
+         reproducible twice in a row against a scratch table on this
+         project's live Postgres container; the "hold the lock for the
+         statement's own implicit transaction" reasoning in the original
+         proposal does not account for read-committed snapshot timing.
+         Actually closing this gap needs a fresh read AFTER acquiring the
+         lock (e.g. a server-side PL/pgSQL function with its own per-
+         statement snapshot, or SELECT ... FOR UPDATE row locking, or a
+         real sequence/IDENTITY), none of which fit as a same-statement
+         SQL expression built by this method.
+
+      Practical risk: low but non-zero for this GraphQL mutation surface.
+      A collision requires two createXxx calls against the SAME physical
+      table to race within the same instant, on a table with no working
+      sequence. Until one of the above is implemented server-side (DB
+      migration to add real sequences/IDENTITY defaults to dictionary
+      tables, or row-level locking via a stored procedure), concurrent
+      creates against the same table are NOT guaranteed to get distinct
+      R_E_C_N_O_ values and callers under concurrent load should serialize
+      creates per table at the application/client level as a mitigation.
 /@*/
 method buildInsert(cTable as character, cFilialField as character, oInput as json, aFieldNames as array) as character class GqlMutationBuilder
     local cCols     := "" as character
@@ -64,10 +118,9 @@ method buildInsert(cTable as character, cFilialField as character, oInput as jso
         cVals += "'" + GqlQueryBuilder():EscapeValue(cFilAnt) + "'"
     endif
 
-    // R_E_C_N_O_ is this table's primary key and defaults to 0 at the SQL
-    // level - raw INSERT bypasses the ISAM/DBAccess layer that normally
-    // assigns it, so it must be computed here or every row after the first
-    // collides on the same PK value.
+    // R_E_C_N_O_ assignment - see the method's Protheus.doc header above for
+    // the full concurrency analysis (known TOCTOU race, investigated and
+    // rejected fixes, practical risk). Kept as MAX()+1 deliberately.
     if !empty(cCols)
         cCols += ", "
         cVals += ", "
