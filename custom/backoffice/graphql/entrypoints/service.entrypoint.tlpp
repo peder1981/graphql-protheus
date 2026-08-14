@@ -23,6 +23,7 @@ User Function GQLSERVICE() as logical
     local cQuery     := "" as character
     local cTypeName  := "" as character
     local oResult    as json
+    local oExecutor  as object
 
     jParams   := oRest:getQueryRequest()
     cQuery    := jParams:GetJsonText("query")
@@ -35,8 +36,8 @@ User Function GQLSERVICE() as logical
     endif
 
     if !empty(cQuery)
-        // Wired in Task 9 (full parse/validate/execute pipeline).
-        oResult := custom.backoffice.graphql.GqlErrors():single("query execution not available yet")
+        oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig))
+        oResult := oExecutor:execute(cQuery)
     elseif !empty(cTypeName)
         oResult := custom.backoffice.graphql.GqlIntrospection():typeDetail(oSchema, cTypeName)
     else

@@ -1,0 +1,188 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "topconn.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Object
+@author GraphQL Engine Team
+@since 3.0.0
+@desc GqlExecutor - parses, validates and executes a GraphQL query source,
+      resolving root table fields and SX9-driven nested relationships.
+/@*/
+class GqlExecutor
+    private data oSchemaProvider    as object
+    private data oDictionaryReader  as object
+    private data oQueryBuilder      as object
+
+    public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object
+    public method execute(cQuerySource as character) as json
+    method resolveTableField(oField as json, cExtraWhere as character) as array
+    method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array
+    method isScalarField(oType as json, cName as character) as logical
+    method fieldNames(aSelection as array) as array
+    method fieldAlias(oField as json) as character
+endclass
+
+method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object class GqlExecutor
+    ::oSchemaProvider   := oSchemaProvider
+    ::oDictionaryReader := oDictionaryReader
+    ::oQueryBuilder     := oQueryBuilder
+    return self
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param cQuerySource Character - raw GraphQL query text
+@return JSON - {"data": {...}} on success, {"errors": [...]} on failure
+/@*/
+method execute(cQuerySource as character) as json class GqlExecutor
+    local oParser    := GqlParser():new(cQuerySource) as object
+    local oValidator := GqlValidator():new(::oSchemaProvider) as object
+    local oDoc       as json
+    local aValErrors as array
+    local aDefs      as array
+    local aSel       as array
+    local oData      as json
+    local nI         := 0 as numeric
+    local nJ         := 0 as numeric
+    local oResult    as json
+
+    oDoc := oParser:parse()
+    if oDoc == nil
+        return GqlErrors():fromArray(oParser:getErrors())
+    endif
+
+    aValErrors := oValidator:validate(oDoc)
+    if len(aValErrors) > 0
+        return GqlErrors():fromArray(aValErrors)
+    endif
+
+    oData := JsonObject():New()
+    aDefs := oDoc["definitions"]
+    for nI := 1 to len(aDefs)
+        aSel := aDefs[nI]["selectionSet"]
+        for nJ := 1 to len(aSel)
+            oData[aSel[nJ]["name"]] := ::resolveTableField(aSel[nJ], "")
+        next nJ
+    next nI
+
+    oResult := JsonObject():New()
+    oResult["data"] := oData
+    return oResult
+endmethod
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.0.0
+@param oField JSON - Field AST node for a root or nested table field
+@param cExtraWhere Character - already-safe (escaped) parent-key WHERE
+       fragment for nested calls, or ""
+@return Array - list of row objects (JSON), each with requested scalars
+        and resolved nested relation lists
+/@*/
+method resolveTableField(oField as json, cExtraWhere as character) as array class GqlExecutor
+    local cTable       := oField["name"] as character
+    local oType        := ::oSchemaProvider:getType(cTable) as json
+    local aScalarSel   := {} as array
+    local aRelationSel := {} as array
+    local nI           := 0 as numeric
+    local oSel         as json
+    local cOrderKey    as character
+    local cFilialField as character
+    local cSql         as character
+    local aRows        := {} as array
+    local cAlq         as character
+    local oRow         as json
+    local nJ           := 0 as numeric
+
+    for nI := 1 to len(oField["selectionSet"])
+        oSel := oField["selectionSet"][nI]
+        if ::isScalarField(oType, oSel["name"])
+            aAdd(aScalarSel, oSel)
+        else
+            aAdd(aRelationSel, oSel)
+        endif
+    next nI
+
+    cOrderKey    := ::oDictionaryReader:getOrderKey(cTable)
+    cFilialField := ::oDictionaryReader:getFilialField(cTable)
+    cSql         := ::oQueryBuilder:build(cTable, cFilialField, ::fieldNames(aScalarSel), oField["arguments"], cOrderKey, cExtraWhere)
+
+    cAlq := GetNextAlias()
+    TCQuery cSql New Alias &cAlq
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        oRow := JsonObject():New()
+        for nI := 1 to len(aScalarSel)
+            oRow[::fieldAlias(aScalarSel[nI])] := (cAlq)->(FieldGet(FieldPos(aScalarSel[nI]["name"])))
+        next nI
+        for nJ := 1 to len(aRelationSel)
+            oRow[aRelationSel[nJ]["name"]] := ::resolveRelation(oType, cTable, aRelationSel[nJ], oRow)
+        next nJ
+        aAdd(aRows, oRow)
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+
+    return aRows
+endmethod
+
+method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array class GqlExecutor
+    local aRelations := ::oDictionaryReader:getRelations(cParentTable) as array
+    local nI         := 0 as numeric
+    local oRelMeta    as json
+    local cLocalField  as character
+    local cForeignField as character
+    local cLocalValue as character
+
+    for nI := 1 to len(aRelations)
+        if aRelations[nI]["relatedTable"] == oRelField["name"]
+            oRelMeta := aRelations[nI]
+            exit
+        endif
+    next nI
+
+    if oRelMeta == nil
+        return {}
+    endif
+
+    cLocalField    := oRelMeta["localFields"]
+    cForeignField  := oRelMeta["foreignFields"]
+    cLocalValue    := GqlQueryBuilder():EscapeValue(cValToChar(oParentRow[cLocalField]))
+
+    return ::resolveTableField(oRelField, cForeignField + " = '" + cLocalValue + "'")
+endmethod
+
+method isScalarField(oType as json, cName as character) as logical class GqlExecutor
+    local aFields := oType["fields"] as array
+    local nI      := 0 as numeric
+    for nI := 1 to len(aFields)
+        if aFields[nI]["name"] == cName
+            return .T.
+        endif
+    next nI
+    return .F.
+endmethod
+
+method fieldNames(aSelection as array) as array class GqlExecutor
+    local aResult := {} as array
+    local nI      := 0 as numeric
+    for nI := 1 to len(aSelection)
+        aAdd(aResult, aSelection[nI]["name"])
+    next nI
+    return aResult
+endmethod
+
+method fieldAlias(oField as json) as character class GqlExecutor
+    if oField["alias"] != nil
+        return oField["alias"]
+    endif
+    return oField["name"]
+endmethod
+
+endnamespace

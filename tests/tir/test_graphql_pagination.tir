@@ -1,0 +1,35 @@
+"""
+TIR Test — GraphQL query pagination (limit/offset, maxPageSize cap)
+"""
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLPagination:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_respects_limit(self):
+        gql = "{ SA1(limit: 3, offset: 0) { A1_COD A1_NOME } }"
+        result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql))
+        data = json.loads(result.text)
+        assert "data" in data
+        rows = data["data"]["SA1"]
+        assert isinstance(rows, list)
+        assert len(rows) <= 3
+
+    def test_offset_shifts_page(self):
+        gql_page1 = "{ SA1(limit: 2, offset: 0) { A1_COD } }"
+        gql_page2 = "{ SA1(limit: 2, offset: 2) { A1_COD } }"
+        r1 = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql_page1))
+        r2 = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql_page2))
+        rows1 = json.loads(r1.text)["data"]["SA1"]
+        rows2 = json.loads(r2.text)["data"]["SA1"]
+        codes1 = {r["A1_COD"] for r in rows1}
+        codes2 = {r["A1_COD"] for r in rows2}
+        assert codes1.isdisjoint(codes2)

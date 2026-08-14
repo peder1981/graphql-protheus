@@ -1,0 +1,27 @@
+"""
+TIR Test — nested relationship resolution via SX9
+"""
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLRelationship:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_nested_relation_resolves(self):
+        # NOTE: replace SC5 with a table this environment's SX9 actually
+        # links from SA1 before running (confirm via execute-sql first).
+        gql = "{ SA1(limit: 1) { A1_COD SC5 { C5_NUM } } }"
+        result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql))
+        data = json.loads(result.text)
+        assert "data" in data
+        rows = data["data"]["SA1"]
+        if rows:
+            assert "SC5" in rows[0]
+            assert isinstance(rows[0]["SC5"], list)
