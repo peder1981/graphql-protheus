@@ -3,6 +3,11 @@
 Dynamic GraphQL server over the Protheus data dictionary (SX2/SX3/SX9),
 running as a TLPP AppServer REST entry point.
 
+**Documentação em português brasileiro**: [`docs/como-comecar.md`](docs/como-comecar.md)
+(guia rápido), [`docs/manual-implementacao.md`](docs/manual-implementacao.md)
+(deploy e configuração) e [`docs/manual-utilizacao.md`](docs/manual-utilizacao.md)
+(referência da API GraphQL).
+
 ## Endpoint
 
 - `GET /graphql` — schema type names (deny-list applied)
