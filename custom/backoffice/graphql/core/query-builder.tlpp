@@ -51,7 +51,9 @@ endmethod
        table alias are not the same string)
 @param aScalarFields Array - field names to select
 @param oArgs JSON - parsed GraphQL arguments (limit, offset, filter)
-@param cOrderKey Character - comma-joined ORDER BY field list
+@param cOrderKey Character - "+"-joined key field list (Protheus's own SIX
+       chave format, e.g. "A1_FILIAL+A1_COD+A1_LOJA") - converted to a
+       comma-separated ORDER BY list internally; never valid SQL on its own
 @param cExtraWhere Character - additional, already-safe WHERE fragment, or
        "" (used by the executor to scope nested relationship queries to
        the parent row's key; the executor is responsible for escaping any
@@ -80,8 +82,13 @@ method build(cTable as character, cFilialField as character, aScalarFields as ar
         cWhere += " AND " + cExtraWhere
     endif
 
+    // cOrderKey arrives in Protheus's own SIX chave format ("+"-joined,
+    // e.g. "A1_FILIAL+A1_COD+A1_LOJA") - not valid SQL syntax on its own
+    // ("+" means arithmetic addition between character columns in
+    // PostgreSQL, not concatenation). Convert to a comma-separated column
+    // list for ORDER BY.
     cSql := "SELECT " + cSelect + " FROM (" + ;
-             "SELECT " + cSelect + ", ROW_NUMBER() OVER (ORDER BY " + cOrderKey + ") AS GQL_RN" + ;
+             "SELECT " + cSelect + ", ROW_NUMBER() OVER (ORDER BY " + StrTran(cOrderKey, "+", ", ") + ") AS GQL_RN" + ;
              " FROM " + RetSqlName(cTable) + " WHERE " + cWhere + ;
              ") GQL_PAGE WHERE GQL_RN > " + cValToChar(nOffset) + " AND GQL_RN <= " + cValToChar(nOffset + nLimit)
 

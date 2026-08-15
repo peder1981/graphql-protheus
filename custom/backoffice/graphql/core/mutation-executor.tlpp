@@ -261,13 +261,17 @@ method keyFieldNames(cTable as character) as array class GqlMutationExecutor
     local aResult := {} as array
     local nI := 0 as numeric
     local nStart := 1 as numeric
-    local nComma := 0 as numeric
+    local nSep := 0 as numeric
 
-    nComma := at(",", cKey)
-    while nComma > 0
-        aAdd(aResult, alltrim(substr(cKey, nStart, nComma - nStart)))
-        nStart := nComma + 1
-        nComma := at(",", cKey, nStart)
+    // "+" is the real Protheus SIX chave separator (e.g.
+    // "A1_FILIAL+A1_COD+A1_LOJA", confirmed against six990 directly) - the
+    // single-field scalar fallback in getOrderKey() never contains "+", so
+    // this parsing is correct for both cases.
+    nSep := at("+", cKey)
+    while nSep > 0
+        aAdd(aResult, alltrim(substr(cKey, nStart, nSep - nStart)))
+        nStart := nSep + 1
+        nSep := at("+", cKey, nStart)
     enddo
     if nStart <= len(cKey)
         aAdd(aResult, alltrim(substr(cKey, nStart)))

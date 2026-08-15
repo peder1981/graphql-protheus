@@ -181,22 +181,20 @@ endmethod
 @author GraphQL Engine Team
 @since 3.0.0
 @param cTable Character - table alias
-@return Character - comma-joined key field list from SIX order 1;
-        falls back to the first scalar field of the table if no SIX
-        row exists for order 1.
+@return Character - "+"-joined key field list from SIX order 1 (the real
+        Protheus SIX chave format, e.g. "A1_FILIAL+A1_COD+A1_LOJA" -
+        confirmed against six990 directly); falls back to the first
+        scalar field of the table if SIX is unreachable by any means.
 /@*/
 method getOrderKey(cTable as character) as character class GqlDictionaryReader
-    local cAlq   := GetNextAlias() as character
+    local cAlq      := GetNextAlias() as character
     local cSixTable := RetSqlName("SIX") as character
-    local cQuery := "" as character
-    local cKey   := "" as character
-    local aFields as array
+    local cSx3Table := "" as character
+    local cQuery    := "" as character
+    local cKey      := "" as character
+    local aFields   as array
 
     if !empty(cSixTable)
-        // ponytail: SIX not registered in every Protheus deployment (confirmed
-        // empty RetSqlName against the live server this plan was verified
-        // against) - fall straight through to the scalar-field fallback below
-        // instead of running a malformed query.
         cQuery := "SELECT X6_CHAVE AS RKEY FROM " + cSixTable + ;
                    " WHERE D_E_L_E_T_ = ' ' AND X6_ARQUIVO = '" + cTable + "' AND X6_ORDEM = '1'"
         TCQuery cQuery New Alias &cAlq
@@ -205,6 +203,32 @@ method getOrderKey(cTable as character) as character class GqlDictionaryReader
             cKey := alltrim((cAlq)->RKEY)
         endif
         (cAlq)->(dbCloseArea())
+    endif
+
+    if empty(cKey)
+        // ponytail: SIX isn't registered as a resolvable alias via
+        // RetSqlName() in every Protheus deployment (confirmed against the
+        // live server this plan was verified against), even when its
+        // physical table genuinely exists with real data. Its physical
+        // Postgres columns are also unprefixed (chave/indice/ordem, unlike
+        // every other dictionary table's x3_-style prefix) - confirmed
+        // directly against six990 in this environment. Derive the physical
+        // table name from RetSqlName("SX3")'s own company suffix (e.g.
+        // SX3990 -> SIX990 - the same suffix every core dictionary table
+        // shares) and query it with the real bare column names, rather
+        // than trusting RetSqlName("SIX") or the X6_-prefixed column names
+        // the primary path above uses.
+        cSx3Table := RetSqlName("SX3")
+        if len(cSx3Table) > 3
+            cQuery := "SELECT chave AS RKEY FROM SIX" + substr(cSx3Table, 4) + ;
+                       " WHERE d_e_l_e_t_ = ' ' AND indice = '" + cTable + "' AND ordem = '1'"
+            TCQuery cQuery New Alias &cAlq
+            (cAlq)->(dbGoTop())
+            if !(cAlq)->(Eof())
+                cKey := alltrim((cAlq)->RKEY)
+            endif
+            (cAlq)->(dbCloseArea())
+        endif
     endif
 
     if !empty(cKey)
