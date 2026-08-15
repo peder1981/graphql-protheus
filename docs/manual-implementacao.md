@@ -192,10 +192,24 @@ sufixo de empresa já usado por `RetSqlName("SX3")` — e só recorre ao
 primeiro campo escalar da tabela como último recurso. Se nenhuma das
 duas formas encontrar a chave real de order 1, o casamento cai para um
 único campo, o que pode fazer `update`/`delete` afetar a linha errada em
-tabelas com mais de uma linha ativa por filial. Antes de liberar uma
-nova tabela em `allowMutations`, confirme que sua chave de ordem 1 é
-corretamente identificada (consulte `docs/manual-utilizacao.md` para como
-testar isso na prática).
+tabelas com mais de uma linha ativa por filial.
+
+**Antes de liberar uma nova tabela em `allowMutations`**, confirme que
+sua chave de ordem 1 é corretamente identificada: crie dois registros de
+teste na mesma filial, diferindo apenas no campo que deveria ser único
+(ex. o código), faça um `update` em apenas um deles e confirme que o
+outro permanece inalterado:
+
+```graphql
+mutation { createTABELA(input: {COD: "TESTE1", ...}) { COD } }
+mutation { createTABELA(input: {COD: "TESTE2", ...}) { COD } }
+mutation { updateTABELA(input: {COD: "TESTE1", ..., NOME: "Alterado"}) { NOME } }
+```
+
+Se o registro `TESTE2` também aparecer alterado (ou se `updateTABELA`
+com uma chave inexistente retornar sucesso em vez de
+`"Row not found for update"`), a tabela não deve ser liberada para
+mutation até o índice `SIX` correspondente ser corrigido no ambiente.
 
 ### Sem validações automáticas do Protheus no caminho de escrita
 

@@ -232,10 +232,13 @@ inválidos numa mutation) podem vir juntos na mesma lista `errors`.
 |---|---|
 | `Unknown or restricted table: '<nome>'` | Tabela não existe, está bloqueada, ou você esqueceu a palavra `mutation` numa chamada de escrita |
 | `Unknown or restricted mutation: <nome>` | Tabela existe para leitura, mas não está liberada em `allowMutations` |
+| `Mutation '<nome>' requires an 'input' argument` | A chamada não incluiu o argumento `input` |
+| `Mutation '<nome>' argument 'input' must be an object` | `input` foi enviado como algo que não é um objeto (ex. um número ou string solto) |
 | `Field '<campo>' is required` | Campo obrigatório (SX3) ausente no `input` de um `create` |
 | `Field '<campo>' must be a string` / `must be numeric` / `must be boolean` | Tipo do valor enviado não bate com o tipo real do campo |
 | `Field '<campo>' exceeds max length <N>` | Valor de texto maior que o tamanho máximo do campo (`X3_TAMANHO`) |
 | `Missing key field '<campo>' for update` / `for delete` | Faltou um campo de chave no `input` de `update`/`delete` |
+| `Update requires at least one non-key field` | O `input` de um `update` só trouxe campos de chave, nada para alterar |
 | `Row not found for update` / `for delete` | A chave enviada não corresponde a nenhum registro ativo |
 | `Write failed for '<mutation>'` | A escrita no banco falhou (SQL malformado, colisão de chave, etc.) |
 
