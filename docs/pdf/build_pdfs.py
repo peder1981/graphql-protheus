@@ -273,9 +273,7 @@ def render(doc, out_dir: Path):
     page_html = build_document(doc)
     title = f"{COMPANY} — {doc['title']}"
     page_html = set_doc_title(page_html, title)
-    out_html = out_dir / f"{doc['id']}.html"
     out_pdf = out_dir / f"{doc['id']}.pdf"
-    out_html.write_text(page_html, encoding="utf-8")
 
     font_config = FontConfiguration()
     HTML(string=page_html, base_url=str(out_dir)).write_pdf(

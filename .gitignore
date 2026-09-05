@@ -1,3 +1,6 @@
 .worktrees/
 .superpowers/
 build/
+
+# Artefatos intermediários do gerador de PDFs
+docs/pdf/*.html
