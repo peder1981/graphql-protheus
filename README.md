@@ -64,15 +64,38 @@ Veja `docs/architecture.md` e
 ## Validação ao vivo
 
 Resultados capturados contra um AppServer Protheus isolado (container
-`protheus-graphql`, REST em `:9996`) — imagens e JSON em
+`protheus-graphql`, REST em `:9996`) — JSON bruto das respostas em
 [`docs/screenshots/`](docs/screenshots/).
 
-| Cenário | Captura |
-|---------|---------|
-| Consulta `{ SA1(limit: 5) { A1_COD A1_LOJA A1_NOME } }` | [`gql-query.png`](docs/screenshots/gql-query.png) / [`query.json`](docs/screenshots/query.json) |
-| Mutation `createSA1` → `updateSA1` → `deleteSA1` (soft-delete) | [`gql-mutation.png`](docs/screenshots/gql-mutation.png) / [`mutation.json`](docs/screenshots/mutation.json) |
-| Introspection `?type=SA1` (campos) | [`gql-introspection.png`](docs/screenshots/gql-introspection.png) / [`introspection.json`](docs/screenshots/introspection.json) |
-| Lista de tipos `GET /graphql` (bloqueio aplicado) | [`gql-schema_list.png`](docs/screenshots/gql-schema_list.png) / [`schema_list.json`](docs/screenshots/schema_list.json) |
+### 1. Lista de tipos (`GET /graphql`)
+
+Listagem do catálogo de tipos expostos, já com o bloqueio de tabelas
+aplicado (`denyTables`).
+
+<img src="docs/screenshots/gql-schema_list.png" alt="Lista de tipos GET /graphql" width="720">
+<p><a href="docs/screenshots/schema_list.json"><code>schema_list.json</code></a></p>
+
+### 2. Consulta (`SA1`)
+
+Consulta simples com paginação: `{ SA1(limit: 5) { A1_COD A1_LOJA A1_NOME } }`.
+
+<img src="docs/screenshots/gql-query.png" alt="Consulta SA1" width="720">
+<p><a href="docs/screenshots/query.json"><code>query.json</code></a></p>
+
+### 3. Mutation (create → update → delete)
+
+Ciclo completo de escrita com soft-delete: `createSA1` → `updateSA1` →
+`deleteSA1` (`D_E_L_E_T_='*'`).
+
+<img src="docs/screenshots/gql-mutation.png" alt="Mutation create/update/delete SA1" width="720">
+<p><a href="docs/screenshots/mutation.json"><code>mutation.json</code></a></p>
+
+### 4. Introspection (`SA1`)
+
+Detalhe do tipo `SA1`: campos, tipos e valores expostos via introspection.
+
+<img src="docs/screenshots/gql-introspection.png" alt="Introspection do tipo SA1" width="720">
+<p><a href="docs/screenshots/introspection.json"><code>introspection.json</code></a></p>
 
 > **Sobre relacionamentos (SX9):** o motor resolve relações a partir de `SX9`
 > (`getRelations`), mas neste deploy de teste a `SX9`/`SIX` não estão
