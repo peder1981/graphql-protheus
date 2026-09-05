@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Manual de Implementação</title>
+<style>/* ============================================================
+   JMPM Tecnologia — Template padrão para documentação em PDF
+   HTML/CSS para WeasyPrint
+   ============================================================ */
+
+@page {
+  size: A4;
+  margin: 22mm 18mm 20mm 18mm;
+
+  @top-left {
+    content: "JMPM Tecnologia";
+    font-family: "Liberation Sans", sans-serif;
+    font-size: 8pt;
+    color: #885F67;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4mm;
+  }
+  @top-right {
+    content: string(doc-title);
+    font-family: "Liberation Sans", sans-serif;
+    font-size: 8pt;
+    color: #8a8a8a;
+    margin-bottom: 4mm;
+  }
+  @bottom-center {
+    content: "Página " counter(page) " de " counter(pages);
+    font-family: "Liberation Sans", sans-serif;
+    font-size: 8pt;
+    color: #8a8a8a;
+  }
+}
+
+@page cover {
+  margin: 0;
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-center { content: none; }
+}
+
+@page toc {
+  @top-left { content: "JMPM Tecnologia"; }
+}
+
+/* ---------- Capa ---------- */
+.cover {
+  page: cover;
+  width: 210mm;
+  height: 297mm;
+  background: #ffffff;
+  position: relative;
+}
+.cover-band {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 12mm;
+  background: linear-gradient(90deg, #182941 0%, #2b4a6f 60%, #885F67 100%);
+}
+.cover-logo {
+  position: absolute;
+  top: 34mm;
+  left: 0; right: 0;
+  text-align: center;
+}
+.cover-logo img {
+  width: 46mm;
+  height: 46mm;
+  object-fit: contain;
+}
+.cover-brand {
+  position: absolute;
+  top: 88mm;
+  left: 0; right: 0;
+  text-align: center;
+  font-family: "Liberation Sans", sans-serif;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: #182941;
+}
+.cover-brand .name {
+  font-size: 20pt;
+  font-weight: bold;
+}
+.cover-brand .tagline {
+  margin-top: 3mm;
+  font-size: 10pt;
+  color: #885F67;
+  letter-spacing: 0.12em;
+}
+.cover-title {
+  position: absolute;
+  top: 128mm;
+  left: 18mm; right: 18mm;
+  text-align: center;
+}
+.cover-title .doc-type {
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 11pt;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #885F67;
+}
+/* h1 da capa não herda o page-break-before global do conteúdo */
+.cover h1,
+.cover-title h1 {
+  page-break-before: auto;
+  string-set: none;
+}
+.cover-title h1 {
+  margin-top: 6mm;
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 30pt;
+  font-weight: bold;
+  color: #182941;
+  line-height: 1.15;
+}
+.cover-title .subtitle {
+  margin-top: 5mm;
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 12.5pt;
+  color: #4a4a4a;
+  line-height: 1.4;
+}
+.cover-meta {
+  position: absolute;
+  bottom: 32mm;
+  left: 0; right: 0;
+  text-align: center;
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 10pt;
+  color: #666666;
+  line-height: 1.7;
+}
+.cover-meta .version {
+  color: #885F67;
+  font-weight: bold;
+}
+.cover-footer-band {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 8mm;
+  background: linear-gradient(90deg, #885F67 0%, #2b4a6f 55%, #182941 100%);
+}
+
+/* ---------- Sumário ---------- */
+.toc {
+  page: toc;
+  page-break-before: always;
+}
+.toc h2 {
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 18pt;
+  color: #182941;
+  border-bottom: 2px solid #885F67;
+  padding-bottom: 3mm;
+  margin-bottom: 8mm;
+}
+.toc ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.toc ul li {
+  margin-bottom: 2.2mm;
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 10.5pt;
+  border-bottom: 1px dotted #d8d8d8;
+  padding-bottom: 1.6mm;
+}
+.toc a {
+  color: #1f2430;
+  text-decoration: none;
+}
+.toc ul li ul {
+  margin-top: 1.6mm;
+  margin-left: 6mm;
+}
+.toc ul li ul li {
+  font-size: 9.5pt;
+  border-bottom: none;
+  padding-bottom: 0.8mm;
+}
+
+/* ---------- Conteúdo ---------- */
+body {
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 10pt;
+  color: #1f2430;
+  line-height: 1.55;
+  string-set: doc-title content(content) tag(title);
+}
+h1 {
+  string-set: doc-title content(chapter);
+  page-break-before: always;
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 20pt;
+  color: #182941;
+  border-bottom: 2.5px solid #885F67;
+  padding-bottom: 3mm;
+  margin: 0 0 6mm 0;
+}
+h2 {
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 14pt;
+  color: #182941;
+  margin: 8mm 0 3.5mm 0;
+}
+h3 {
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 11.5pt;
+  color: #2b4a6f;
+  margin: 6mm 0 2.5mm 0;
+}
+h4 {
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 10.5pt;
+  color: #885F67;
+  margin: 5mm 0 2mm 0;
+  font-style: normal;
+}
+p {
+  margin: 0 0 3mm 0;
+  text-align: justify;
+}
+ul, ol {
+  margin: 0 0 3mm 0;
+  padding-left: 6mm;
+}
+li {
+  margin-bottom: 1.2mm;
+}
+strong { color: #182941; }
+
+a { color: #2b4a6f; text-decoration: none; }
+
+code {
+  font-family: "DejaVu Sans Mono", monospace;
+  font-size: 8.6pt;
+  background: #f3f1f1;
+  color: #182941;
+  padding: 0 1.2mm;
+  border-radius: 1.5mm;
+}
+pre {
+  background: #182941;
+  color: #e8e8e8;
+  padding: 4mm 5mm;
+  border-radius: 2.5mm;
+  font-family: "DejaVu Sans Mono", monospace;
+  font-size: 8.4pt;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  page-break-inside: avoid;
+  margin: 0 0 4mm 0;
+}
+pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  font-size: 8.4pt;
+}
+
+blockquote {
+  margin: 0 0 4mm 0;
+  padding: 3mm 4mm;
+  border-left: 3px solid #885F67;
+  background: #faf5f5;
+  font-style: normal;
+  color: #4a4a4a;
+}
+blockquote p { margin: 0; }
+
+img {
+  max-width: 100%;
+}
+
+/* ---------- Tabelas ---------- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 4mm 0;
+  font-size: 9pt;
+  page-break-inside: avoid;
+}
+thead th {
+  background: #182941;
+  color: #ffffff;
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 9pt;
+  text-align: left;
+  padding: 2.2mm 2.5mm;
+}
+tbody td {
+  padding: 2mm 2.5mm;
+  border-bottom: 1px solid #dcdcdc;
+  vertical-align: top;
+}
+tbody tr:nth-child(even) {
+  background: #f7f5f5;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #d8d8d8;
+  margin: 5mm 0;
+}
+
+/* ---------- Meta de documento no topo ---------- */
+.doc-meta {
+  font-family: "Liberation Sans", sans-serif;
+  font-size: 9pt;
+  color: #666;
+  margin-bottom: 6mm;
+}
+.doc-meta strong { color: #182941; }</style>
+</head>
+<body>
+<div style="string-set: doc-title &quot;JMPM Tecnologia — Manual de Implementação&quot;; display:none"></div>
+<div class="cover">
+<div class="cover-band"></div>
+<div class="cover-logo"><img src="/home/peder/Projetos/GraphQL/docs/pdf/template/assets/jmpm-logo.png" alt="JMPM Tecnologia"></div>
+<div class="cover-brand"><div class="name">JMPM Tecnologia</div><div class="tagline">Tecnologia &amp; Desenvolvimento</div></div>
+<div class="cover-title">
+<div class="doc-type">Manual Técnico</div>
+<h1>Manual de Implementação</h1>
+<div class="subtitle">Instalação, configuração e operação do Motor Core GraphQL em ambiente Protheus</div>
+</div>
+<div class="cover-meta">
+<div>Versão <span class="version">3.1.0</span></div>
+<div>JMPM Tecnologia</div>
+<div>05/09/2026</div>
+</div>
+<div class="cover-footer-band"></div>
+</div>
+<div class="pagebody">
+<div class="toc">
+<h2>Sumário</h2>
+<ul>
+<li><a href="#manual-de-implementacao">Manual de Implementação</a></li>
+<li><a href="#visao-geral-da-estrutura">Visão geral da estrutura</a></li>
+<li><a href="#pre-requisitos-de-ambiente">Pré-requisitos de ambiente</a></li>
+<li><a href="#passo-a-passo-de-deploy">Passo a passo de deploy</a></li>
+<li><a href="#arquivo-de-configuracao-referencia-completa">Arquivo de configuração — referência completa</a></li>
+<li><a href="#limitacoes-conhecidas-leia-antes-de-liberar-tabelas-em-producao">Limitações conhecidas (leia antes de liberar tabelas em produção)</a></li>
+<li><a href="#sem-geracao-automatica-de-chave">Sem geração automática de chave</a></li>
+<li><a href="#testes">Testes</a></li>
+<li><a href="#roteiro-de-sub-projetos">Roteiro de sub-projetos</a></li>
+</ul>
+</div>
+<div class="doc-content"><p class="doc-meta"><strong>Manual Técnico</strong> &mdash; Guia completo para quem vai instalar, configurar e operar o motor GraphQL em um ambiente Protheus.</p><h1 id="manual-de-implementacao">Manual de Implementação</h1>
+<p>Guia completo para quem vai instalar, configurar e operar este motor
+GraphQL em um ambiente Protheus. Público-alvo: administradores de
+ambiente e desenvolvedores responsáveis pelo deploy.</p>
+<h2 id="visao-geral-da-estrutura">Visão geral da estrutura</h2>
+<pre><code>custom/backoffice/graphql/
+  config/
+    graphql-config.json        -- lista de bloqueio, liberação de mutations, paginação
+  core/
+    lexer.tlpp                 -- tokeniza o texto GraphQL recebido
+    parser.tlpp                 -- monta a árvore de sintaxe (AST) a partir dos tokens
+    validator.tlpp               -- valida a AST contra o schema (leitura)
+    dictionary-reader.tlpp        -- leitura crua de SX2/SX3/SX9/SIX
+    access-control.tlpp            -- aplica a lista de bloqueio de config
+    schema-provider.tlpp            -- gera e cacheia o schema GraphQL dinamicamente
+    query-builder.tlpp               -- monta o SQL de leitura (SELECT paginado)
+    executor.tlpp                     -- orquestra leitura: valida, executa, resolve relações
+    introspection.tlpp                 -- responde __schema/__type
+    errors.tlpp                         -- monta o envelope {&quot;errors&quot;: [...]}
+    mutation-schema.tlpp                 -- expõe create/update/deleteTABLE só para tabelas liberadas
+    input-validator.tlpp                  -- valida input de mutation contra SX3
+    mutation-builder.tlpp                  -- monta SQL de INSERT/UPDATE/soft-delete
+    mutation-executor.tlpp                  -- orquestra escrita: valida, escreve, reseleciona
+  entrypoints/
+    service.entrypoint.tlpp                  -- ponto de entrada REST único (@Get /graphql)
+</code></pre>
+<p>Nenhum tipo GraphQL é escrito à mão. Todo o schema é gerado em tempo de
+execução a partir do dicionário de dados do Protheus (SX2, SX3, SX9,
+SIX), com cache em memória por processo do AppServer.</p>
+<h2 id="pre-requisitos-de-ambiente">Pré-requisitos de ambiente</h2>
+<ul>
+<li>AppServer Protheus com o framework REST habilitado
+  (<code>[HTTPREST]</code> no <code>appserver.ini</code>, escutando na porta configurada —
+  <code>9995</code> nos exemplos deste manual).</li>
+<li>Backend de banco de dados: o motor foi desenvolvido e testado contra
+  <strong>PostgreSQL</strong>. A escrita usa SQL bruto via <code>TCSqlExec()</code> — não foi
+  validada contra outros bancos suportados pelo Protheus (SQL Server,
+  Oracle, DB2).</li>
+<li>Ferramental de compilação de fontes <code>.tlpp</code> para o seu ambiente
+  (<code>appsrvlinux -compile</code> ou equivalente).</li>
+</ul>
+<h2 id="passo-a-passo-de-deploy">Passo a passo de deploy</h2>
+<h3 id="1-compilar-os-fontes">1. Compilar os fontes</h3>
+<p>Compile, na ordem de dependência abaixo, todos os arquivos de
+<code>custom/backoffice/graphql/core/</code> seguidos de
+<code>custom/backoffice/graphql/entrypoints/service.entrypoint.tlpp</code>:</p>
+<pre><code>config.tlpp
+access-control.tlpp
+dictionary-reader.tlpp
+schema-provider.tlpp
+lexer.tlpp
+parser.tlpp
+validator.tlpp
+query-builder.tlpp
+executor.tlpp
+errors.tlpp
+introspection.tlpp
+mutation-schema.tlpp
+input-validator.tlpp
+mutation-builder.tlpp
+mutation-executor.tlpp
+entrypoints/service.entrypoint.tlpp
+</code></pre>
+<p>Compilar o conjunto inteiro junto (não só o arquivo alterado) evita erros
+de "classe inválida" quando o ambiente de compilação não tem as classes
+de uma sessão anterior em cache.</p>
+<h3 id="2-implantar-o-rpo">2. Implantar o RPO</h3>
+<p>Copie o RPO compilado para o AppServer de destino e reinicie o processo,
+seguindo o processo padrão do seu ambiente.</p>
+<h3 id="3-implantar-o-arquivo-de-configuracao-passo-manual-obrigatorio">3. Implantar o arquivo de configuração (passo manual obrigatório)</h3>
+<p><strong>Este é o passo mais fácil de esquecer, e o mais silencioso quando
+esquecido.</strong></p>
+<p><code>custom/backoffice/graphql/config/graphql-config.json</code> <strong>não</strong> é um fonte
+<code>.tlpp</code> — ele nunca entra no RPO compilado. Ele precisa ser copiado
+manualmente para o sistema de arquivos do servidor, no caminho:</p>
+<pre><code>&lt;RootPath&gt;/custom/backoffice/graphql/config/graphql-config.json
+</code></pre>
+<p>Onde <code>&lt;RootPath&gt;</code> é o valor de <code>[P12] RootPath=</code> no <code>appserver.ini</code> do
+ambiente de destino — <strong>não</strong> o <code>SourcePath</code>, e não o diretório de
+trabalho do processo do AppServer. Isso foi confirmado por teste direto
+contra um servidor real: <code>MemoRead()</code> (a função que a classe <code>GqlConfig</code>
+usa para ler o JSON) resolve caminhos relativos contra o <code>RootPath</code>,
+ignorando as outras três localizações candidatas testadas.</p>
+<p><strong>Consequência de esquecer este passo</strong>: <code>GqlConfig:new()</code> não encontra o
+arquivo, cai silenciosamente nos valores padrão embutidos (lista de
+bloqueio vazia, nenhuma tabela liberada para mutation), e <strong>todas as
+tabelas do dicionário ficam visíveis e legíveis via GraphQL</strong> — incluindo
+tabelas sensíveis como <code>SRH*</code> (Recursos Humanos), a menos que o
+<code>graphql-config.json</code> real esteja de fato no lugar certo. Sempre confirme
+após o deploy:</p>
+<pre><code class="language-bash">curl &quot;http://localhost:9995/rest/graphql&quot; | grep -o '&quot;SRA&quot;'
+</code></pre>
+<p>Não deve haver saída (assumindo <code>SRA</code> na sua lista de bloqueio) — se
+aparecer, o arquivo de configuração não foi encontrado pelo servidor.</p>
+<h3 id="4-confirmar-que-o-servico-esta-no-ar">4. Confirmar que o serviço está no ar</h3>
+<pre><code class="language-bash">curl &quot;http://localhost:9995/rest/graphql&quot;
+</code></pre>
+<p>Deve retornar a lista de tipos disponíveis (<code>__schema.types</code>).</p>
+<h2 id="arquivo-de-configuracao-referencia-completa">Arquivo de configuração — referência completa</h2>
+<p><code>custom/backoffice/graphql/config/graphql-config.json</code>:</p>
+<pre><code class="language-json">{
+  &quot;denyTables&quot;: [&quot;SRH*&quot;, &quot;SRA&quot;, &quot;SR5&quot;],
+  &quot;denyFields&quot;: [&quot;*SENHA*&quot;, &quot;*_PASSWORD*&quot;],
+  &quot;allowMutations&quot;: [&quot;SA1&quot;],
+  &quot;pagination&quot;: { &quot;defaultPageSize&quot;: 20, &quot;maxPageSize&quot;: 200 },
+  &quot;schemaCacheTtlSeconds&quot;: 3600
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Chave</th>
+<th>Tipo</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>denyTables</code></td>
+<td>array de strings com curinga</td>
+<td>Aliases de tabela nunca expostos, ex. <code>"SRH*"</code></td>
+</tr>
+<tr>
+<td><code>denyFields</code></td>
+<td>array de strings com curinga</td>
+<td>Nomes de campo nunca expostos, ex. <code>"*SENHA*"</code></td>
+</tr>
+<tr>
+<td><code>allowMutations</code></td>
+<td>array de aliases exatos (sem curinga)</td>
+<td>Tabelas que aceitam <code>createTABLE</code>/<code>updateTABLE</code>/<code>deleteTABLE</code>; vazio por padrão (tudo somente leitura)</td>
+</tr>
+<tr>
+<td><code>pagination.defaultPageSize</code></td>
+<td>número</td>
+<td><code>limit</code> usado quando a consulta não informa um</td>
+</tr>
+<tr>
+<td><code>pagination.maxPageSize</code></td>
+<td>número</td>
+<td>Teto rígido de <code>limit</code>, mesmo que a consulta peça mais</td>
+</tr>
+<tr>
+<td><code>schemaCacheTtlSeconds</code></td>
+<td>número</td>
+<td>Tempo que o tipo gerado de uma tabela fica em cache antes de ser reconstruído automaticamente</td>
+</tr>
+</tbody>
+</table>
+<p>Curingas (<code>*</code>) funcionam como "qualquer sequência de caracteres" e
+aplicam-se apenas a <code>denyTables</code>/<code>denyFields</code>. <code>allowMutations</code> exige o
+alias exato — não aceita curinga, por design: liberar escrita é uma
+decisão por tabela, não um padrão amplo.</p>
+<p>Tabelas/campos bloqueados nunca aparecem em introspecção nem em
+resultado de consulta, independentemente da forma da query. Uma tabela
+só é gravável se estiver <strong>ao mesmo tempo</strong> em <code>allowMutations</code> <strong>e</strong>
+ausente de <code>denyTables</code> — as duas condições precisam valer juntas.</p>
+<h2 id="limitacoes-conhecidas-leia-antes-de-liberar-tabelas-em-producao">Limitações conhecidas (leia antes de liberar tabelas em produção)</h2>
+<h3 id="concorrencia-na-criacao-de-registros-r_e_c_n_o_">Concorrência na criação de registros (<code>R_E_C_N_O_</code>)</h3>
+<p>Mutations de <code>create</code> escrevem via SQL bruto, o que faz o caminho normal
+de atribuição automática de <code>R_E_C_N_O_</code> (a chave física de registro do
+Protheus) pelo ISAM/DBAccess ser contornado. O motor calcula esse valor
+via uma subconsulta <code>MAX(R_E_C_N_O_) + 1</code>.</p>
+<p><strong>Isso não é seguro sob escrita concorrente</strong>: duas chamadas <code>create</code>
+simultâneas contra a mesma tabela podem calcular o mesmo próximo valor
+antes de qualquer uma delas confirmar a transação, causando colisão de
+chave primária. Foram investigadas e descartadas duas alternativas (uma
+sequência real do PostgreSQL — não existe para as tabelas do dicionário
+Protheus neste tipo de ambiente — e um lock consultivo do PostgreSQL
+dentro da mesma instrução — testado e confirmado ineficaz sob o nível de
+isolamento <code>READ COMMITTED</code>). Resolver isso de verdade exige uma
+migração de banco (sequência/<code>IDENTITY</code> real nas tabelas do dicionário)
+ou uma stored procedure no servidor — ambos fora do escopo atual.</p>
+<p><strong>Garantia de segurança atual</strong>: seguro para uso de requisição única ou
+baixa concorrência. <strong>Não seguro</strong> para tráfego de produção concorrente
+contra a mesma tabela. Veja o cabeçalho Protheus.doc de <code>buildInsert()</code>
+em <code>mutation-builder.tlpp</code> para a análise técnica completa.</p>
+<h3 id="casamento-de-linha-em-updatedelete-depende-do-indice-six">Casamento de linha em update/delete depende do índice SIX</h3>
+<p><code>update</code>/<code>delete</code> identificam a linha certa usando a chave de ordem 1 do
+índice <code>SIX</code> da tabela. Em ambientes onde <code>RetSqlName("SIX")</code> não
+resolve (comum em instalações de desenvolvimento/teste), o motor tenta
+um segundo caminho, derivando o nome físico da tabela <code>SIX</code> a partir do
+sufixo de empresa já usado por <code>RetSqlName("SX3")</code> — e só recorre ao
+primeiro campo escalar da tabela como último recurso. Se nenhuma das
+duas formas encontrar a chave real de order 1, o casamento cai para um
+único campo, o que pode fazer <code>update</code>/<code>delete</code> afetar a linha errada em
+tabelas com mais de uma linha ativa por filial.</p>
+<p><strong>Antes de liberar uma nova tabela em <code>allowMutations</code></strong>, confirme que
+sua chave de ordem 1 é corretamente identificada: crie dois registros de
+teste na mesma filial, diferindo apenas no campo que deveria ser único
+(ex. o código), faça um <code>update</code> em apenas um deles e confirme que o
+outro permanece inalterado:</p>
+<pre><code class="language-graphql">mutation { createTABELA(input: {COD: &quot;TESTE1&quot;, ...}) { COD } }
+mutation { createTABELA(input: {COD: &quot;TESTE2&quot;, ...}) { COD } }
+mutation { updateTABELA(input: {COD: &quot;TESTE1&quot;, ..., NOME: &quot;Alterado&quot;}) { NOME } }
+</code></pre>
+<p>Se o registro <code>TESTE2</code> também aparecer alterado (ou se <code>updateTABELA</code>
+com uma chave inexistente retornar sucesso em vez de
+<code>"Row not found for update"</code>), a tabela não deve ser liberada para
+mutation até o índice <code>SIX</code> correspondente ser corrigido no ambiente.</p>
+<h3 id="sem-validacoes-automaticas-do-protheus-no-caminho-de-escrita">Sem validações automáticas do Protheus no caminho de escrita</h3>
+<p>Mutations não passam pelo <code>FWFormModel</code>/MVC — nenhum trigger <code>SX7</code>, regra
+de negócio de rotina, ou fórmula <code>X3_VALID</code> é executada. A única
+validação aplicada é a que o motor faz explicitamente: campo obrigatório
+(<code>X3_OBRIGAT</code>), tipo e tamanho máximo (<code>X3_TAMANHO</code>), a partir do SX3.</p>
+<h3 id="campos-desconhecidos-no-input-sao-ignorados-silenciosamente">Campos desconhecidos no <code>input</code> são ignorados silenciosamente</h3>
+<p>Se o cliente enviar no <code>input</code> de uma mutation um campo que não existe
+na tabela (ou que está bloqueado por <code>denyFields</code>), o motor simplesmente
+o ignora — não gera erro. Isso não é uma falha de segurança (o campo
+nunca chega a ser escrito, já que as listas de campos usadas na escrita
+vêm sempre do dicionário, nunca diretamente do <code>input</code> do cliente), mas
+diverge da semântica usual do GraphQL, onde um campo desconhecido em um
+objeto de entrada normalmente gera erro de validação. Fica para um
+sub-projeto futuro (Auth) fechar essa lacuna.</p>
+<h2 id="sem-geracao-automatica-de-chave">Sem geração automática de chave</h2>
+<p>O cliente sempre precisa enviar o(s) campo(s) de chave no <code>input</code>,
+inclusive em <code>create</code> — o motor não gera código automaticamente via SX5
+(<code>GetSxeNum()</code>). Quem precisar de numeração automática deve gerar a
+chave antes de chamar a mutation.</p>
+<h2 id="testes">Testes</h2>
+<p>Testes end-to-end em Python (framework TIR) ficam em <code>tests/tir/</code>.
+Execute com <code>pytest tests/tir/ -v</code> contra um AppServer Protheus real com
+este RPO implantado. Não há suíte de testes unitários AdvPL/TLPP neste
+projeto — a verificação em desenvolvimento foi feita via <code>curl</code> ao vivo
+contra um servidor real, e os testes TIR documentam o comportamento
+esperado para verificação contínua.</p>
+<h2 id="roteiro-de-sub-projetos">Roteiro de sub-projetos</h2>
+<p>Este motor faz parte de um roteiro maior em 6 sub-projetos:</p>
+<ol>
+<li><strong>Core Engine</strong> (leitura) — concluído</li>
+<li><strong>Mutations</strong> (escrita) — concluído, este manual</li>
+<li><strong>Auth</strong> — autenticação/autorização real por usuário</li>
+<li><strong>Field Hooks</strong> — pontos de extensão por campo</li>
+<li><strong>SDK Generator</strong> — geração de contratos AdvPL a partir do schema</li>
+<li><strong>Console PO-UI</strong> — interface administrativa</li>
+</ol>
+<p>Cada sub-projeto tem sua própria especificação em
+<code>docs/superpowers/specs/</code>.</p></div>
+</div>
+</body>
+</html>
