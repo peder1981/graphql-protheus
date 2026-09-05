@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL update mutation
+Teste TIR — mutation de atualização GraphQL
 """
 from contrib.tir import Webapp
 import json
@@ -15,17 +15,17 @@ class TestGraphQLMutationUpdate:
         self.client.close()
 
     def test_mutation_update(self):
-        # Create test record
+        # Cria registro de teste
         create_gql = 'mutation { createSA1(input: {A1_COD: "ZZ0002", A1_LOJA: "01", A1_NOME: "Before"}) { A1_COD } }'
         self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(create_gql))
 
-        # Update the record — must include A1_FILIAL
+        # Atualiza o registro — deve incluir A1_FILIAL
         update_gql = 'mutation { updateSA1(input: {A1_FILIAL: "01", A1_COD: "ZZ0002", A1_LOJA: "01", A1_NOME: "After"}) { A1_NOME } }'
         result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(update_gql))
         data = json.loads(result.text)
         assert data["data"]["updateSA1"]["A1_NOME"] == "After"
 
-        # Verify update via read query
+        # Verifica a atualização via consulta de leitura
         verify_gql = '{ SA1(filter: [{field: "A1_COD", op: "eq", value: "ZZ0002"}]) { A1_COD A1_NOME } }'
         verify_result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(verify_gql))
         verify_data = json.loads(verify_result.text)

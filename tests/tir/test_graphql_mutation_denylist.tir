@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL mutation denylist enforcement
+Teste TIR — aplicação da lista de bloqueio em mutations GraphQL
 """
 from contrib.tir import Webapp
 import json

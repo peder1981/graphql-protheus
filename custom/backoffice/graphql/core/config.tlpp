@@ -4,11 +4,11 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlConfig - loads custom/backoffice/graphql/config/graphql-config.json
-      and exposes typed accessors for deny-lists and pagination limits.
+@desc GqlConfig - carrega custom/backoffice/graphql/config/graphql-config.json
+      e expõe acessores tipados para listas de bloqueio e limites de paginação.
 /@*/
 class GqlConfig
     private data aDenyTables         as array
@@ -80,31 +80,24 @@ method new() as object class GqlConfig
     endif
 
     return self
-endmethod
 
 method getDenyTables() as array class GqlConfig
     return ::aDenyTables
-endmethod
 
 method getDenyFields() as array class GqlConfig
     return ::aDenyFields
-endmethod
 
 method getAllowMutations() as array class GqlConfig
     return ::aAllowMutations
-endmethod
 
 method getDefaultPageSize() as numeric class GqlConfig
     return ::nDefaultPageSize
-endmethod
 
 method getMaxPageSize() as numeric class GqlConfig
     return ::nMaxPageSize
-endmethod
 
 method getSchemaCacheTtlSeconds() as numeric class GqlConfig
     return ::nSchemaCacheTtlSecs
-endmethod
 
 /*/{Protheus.doc}
 @type Static Function
@@ -151,7 +144,6 @@ method MatchWildcard(cPattern as character, cValue as character) as logical clas
     endif
 
     return .T.
-endmethod
 
 method SplitOnStar(cPattern as character) as array class GqlConfig
     local aResult := {}          as array
@@ -171,6 +163,4 @@ method SplitOnStar(cPattern as character) as array class GqlConfig
     aAdd(aResult, cAccum)
 
     return aResult
-endmethod
 
-endnamespace

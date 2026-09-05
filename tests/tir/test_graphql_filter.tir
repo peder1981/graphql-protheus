@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL query filtering
+Teste TIR — filtro de consulta GraphQL
 """
 from contrib.tir import Webapp
 import json
@@ -22,6 +22,7 @@ class TestGraphQLFilter:
         assert all(r["A1_COD"].strip() == "000001" for r in rows)
 
     def test_filter_injection_value_is_harmless(self):
+        # Valor de injeção SQL é inofensivo: escapado antes de chegar ao banco
         gql = "{ SA1(limit: 5, filter: [{field: \"A1_COD\", op: \"eq\", value: \"' OR '1'='1\"}]) { A1_COD } }"
         result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql))
         assert result.status_code == 200

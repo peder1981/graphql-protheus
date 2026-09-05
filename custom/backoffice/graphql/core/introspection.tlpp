@@ -4,10 +4,10 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlIntrospection - builds the __schema/__type response envelopes.
+@desc GqlIntrospection - monta os envelopes de resposta __schema/__type.
 /@*/
 class GqlIntrospection
     static method schemaNames(oSchemaProvider as object) as json
@@ -38,7 +38,6 @@ method schemaNames(oSchemaProvider as object) as json class GqlIntrospection
     oResult := JsonObject():New()
     oResult["data"] := oData
     return oResult
-endmethod
 
 method typeDetail(oSchemaProvider as object, cTable as character) as json class GqlIntrospection
     local oType := oSchemaProvider:getType(upper(alltrim(cTable))) as json
@@ -55,6 +54,4 @@ method typeDetail(oSchemaProvider as object, cTable as character) as json class 
     oResult := JsonObject():New()
     oResult["data"] := oData
     return oResult
-endmethod
 
-endnamespace

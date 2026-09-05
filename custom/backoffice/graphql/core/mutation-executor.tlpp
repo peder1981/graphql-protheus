@@ -4,13 +4,13 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.1.0
-@desc GqlMutationExecutor - parses a mutation document, resolves each root
-      field to a table+operation (createTABLE/updateTABLE/deleteTABLE),
-      validates and writes via GqlInputValidator/GqlMutationBuilder, and
-      returns the affected row via the existing read-path executor.
+@desc GqlMutationExecutor - parseia um documento mutation, resolve cada
+      campo raiz para tabela+operação (createTABLE/updateTABLE/deleteTABLE),
+      valida e escreve via GqlInputValidator/GqlMutationBuilder, e retorna
+      a linha afetada via o executor de leitura existente.
 /@*/
 class GqlMutationExecutor
     private data oMutationSchema   as object
@@ -35,7 +35,6 @@ method new(oMutationSchema as object, oDictionaryReader as object, oInputValidat
     ::oMutationBuilder  := oMutationBuilder
     ::oExecutor         := oExecutor
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -76,7 +75,6 @@ method execute(cQuerySource as character) as json class GqlMutationExecutor
     oResult := JsonObject():New()
     oResult["data"] := oData
     return oResult
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -225,7 +223,6 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
     endif
 
     return GqlErrors():single("Unknown or restricted mutation: " + oField["name"])
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -254,19 +251,17 @@ method splitFieldName(cName as character) as json class GqlMutationExecutor
     endif
 
     return nil
-endmethod
 
 method keyFieldNames(cTable as character) as array class GqlMutationExecutor
     local cKey := ::oDictionaryReader:getOrderKey(cTable) as character
     local aResult := {} as array
-    local nI := 0 as numeric
     local nStart := 1 as numeric
     local nSep := 0 as numeric
 
-    // "+" is the real Protheus SIX chave separator (e.g.
-    // "A1_FILIAL+A1_COD+A1_LOJA", confirmed against six990 directly) - the
-    // single-field scalar fallback in getOrderKey() never contains "+", so
-    // this parsing is correct for both cases.
+    // "+" é o separador real de chave SIX do Protheus (ex.
+    // "A1_FILIAL+A1_COD+A1_LOJA", confirmado diretamente contra six990) - o
+    // fallback escalar de campo único de getOrderKey() nunca contém "+", então
+    // este parsing é correto para ambos os casos.
     nSep := at("+", cKey)
     while nSep > 0
         aAdd(aResult, alltrim(substr(cKey, nStart, nSep - nStart)))
@@ -278,7 +273,6 @@ method keyFieldNames(cTable as character) as array class GqlMutationExecutor
     endif
 
     return aResult
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -315,7 +309,6 @@ method nonKeyPresentFields(cTable as character, oInput as json, aKeyFields as ar
     next nI
 
     return aResult
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -335,12 +328,12 @@ method fetchByKey(cTable as character, oField as json, oInput as json, aKeyField
         if nI > 1
             cWhere += " AND "
         endif
-        // The filial key field is never taken from oInput - create mutations
-        // are not required to supply it (it is always forced from cFilAnt,
-        // exactly like GqlMutationBuilder does for INSERT/UPDATE/DELETE WHERE
-        // clauses). Update/delete do require it in oInput (validated by the
-        // caller), but forcing cFilAnt here keeps the same-branch guarantee
-        // consistent for every operation.
+        // O campo de filial da chave nunca é lido do oInput - mutations
+        // de create não são obrigadas a fornecê-lo (é sempre forçado de
+        // cFilAnt, exatamente como o GqlMutationBuilder faz nas cláusulas
+        // WHERE de INSERT/UPDATE/DELETE). Update/delete exigem-no no oInput
+        // (validado pelo chamador), mas forçar cFilAnt aqui mantém a
+        // garantia de mesma filial consistente para toda operação.
         if !empty(cFilialField) .and. aKeyFields[nI] == cFilialField
             cKeyValue := cFilAnt
         else
@@ -349,18 +342,17 @@ method fetchByKey(cTable as character, oField as json, oInput as json, aKeyField
         cWhere += aKeyFields[nI] + " = '" + GqlQueryBuilder():EscapeValue(cKeyValue) + "'"
     next nI
 
-    // oField is the mutation root field (e.g. "createSA1"/"updateSA1"/"deleteSA1"):
-    // its own name is NOT the table name, only its selectionSet is reusable here.
-    // GqlExecutor:resolveTableField derives the table from oField["name"], so a
-    // synthetic field node naming the real table (cTable) must be built, reusing
-    // oField's selectionSet and an empty arguments object (no filter/limit/offset
-    // should leak in from the mutation's own "input" argument).
+    // oField é o campo raiz da mutation (ex. "createSA1"/"updateSA1"/"deleteSA1"):
+    // seu próprio nome NÃO é o nome da tabela, apenas seu selectionSet é
+    // reutilizável aqui. GqlExecutor:resolveTableField deriva a tabela de
+    // oField["name"], então um nó de campo sintético nomeando a tabela real
+    // (cTable) precisa ser construído, reutilizando o selectionSet de oField
+    // e um objeto de argumentos vazio (nenhum filter/limit/offset deve
+    // vazar do próprio argumento "input" da mutation).
     oSynthField := JsonObject():New()
     oSynthField["name"] := cTable
     oSynthField["selectionSet"] := oField["selectionSet"]
     oSynthField["arguments"] := JsonObject():New()
 
     return ::oExecutor:resolveTableField(oSynthField, cWhere)
-endmethod
 
-endnamespace

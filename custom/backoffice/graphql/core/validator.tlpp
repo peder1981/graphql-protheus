@@ -4,12 +4,12 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlValidator - validates a parsed AST against the dynamic schema
-      before execution: unknown tables, unknown fields, unsupported filter
-      operators.
+@desc GqlValidator - valida a AST parseada contra o schema dinâmico
+      antes da execução: tabelas desconhecidas, campos desconhecidos,
+      operadores de filtro não suportados.
 /@*/
 class GqlValidator
     private data oSchemaProvider as object
@@ -26,7 +26,6 @@ endclass
 method new(oSchemaProvider as object) as object class GqlValidator
     ::oSchemaProvider := oSchemaProvider
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -50,7 +49,6 @@ method validate(oDocument as json) as array class GqlValidator
         next nI
 
         return aErrors
-    endmethod
 
     method validateRootField(oField as json, aErrors as array) as object class GqlValidator
         local cTable := oField["name"] as character
@@ -71,7 +69,6 @@ method validate(oDocument as json) as array class GqlValidator
         endif
         ::validateSelection(oType, aSubSel, aErrors)
         return self
-    endmethod
 
     method validateSelection(oType as json, aSelection as array, aErrors as array) as object class GqlValidator
         local nI       := 0 as numeric
@@ -100,7 +97,6 @@ method validate(oDocument as json) as array class GqlValidator
             aAdd(aErrors, "Unknown field '" + cName + "' on type '" + oType["name"] + "'")
         next nI
         return self
-    endmethod
 
     method fieldExistsOnType(oType as json, cField as character) as logical class GqlValidator
         local aFields := oType["fields"] as array
@@ -112,7 +108,6 @@ method validate(oDocument as json) as array class GqlValidator
             endif
         next nI
         return .F.
-    endmethod
 
     method relationTargetType(oType as json, cField as character) as json class GqlValidator
         local aRelations := oType["relations"] as array
@@ -124,7 +119,6 @@ method validate(oDocument as json) as array class GqlValidator
             endif
         next nI
         return nil
-    endmethod
 
     method validateArguments(oType as json, oArgs as json, aErrors as array) as object class GqlValidator
         local oFilterArg := oArgs["filter"] as json
@@ -156,6 +150,4 @@ method validate(oDocument as json) as array class GqlValidator
             endif
         next nI
         return self
-    endmethod
 
-endnamespace

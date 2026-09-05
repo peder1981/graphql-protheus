@@ -4,13 +4,13 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlSchemaProvider - lazy, TTL-cached GraphQL schema built from
-      GqlDictionaryReader. Table names are cheap and cached eagerly on
-      first listTableNames() call; full per-table types are generated
-      only when getType() is called for that table.
+@desc GqlSchemaProvider - schema GraphQL lazy com cache por TTL, construído
+      a partir do GqlDictionaryReader. Nomes de tabela são baratos e
+      cacheados eagerly na primeira chamada de listTableNames(); tipos
+      completos por tabela são gerados apenas quando getType() é chamado.
 /@*/
 class GqlSchemaProvider
     private data oDictionaryReader as object
@@ -33,7 +33,6 @@ method new(oDictionaryReader as object, oConfig as object) as object class GqlSc
     ::hTypeCache        := JsonObject():New()
     ::nCacheBuiltAt      := 0
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -59,7 +58,6 @@ method listTableNames() as array class GqlSchemaProvider
     endif
 
     return ::aTableNamesCache
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -72,7 +70,6 @@ method getType(cTable as character) as json class GqlSchemaProvider
     local aNames  := ::listTableNames()
     local oType   as json
     local aFields as array
-    local nI      := 0 as numeric
     local aRelations := {} as array
     local aRelationSummary := {} as array
     local nJ := 0 as numeric
@@ -110,7 +107,6 @@ method getType(cTable as character) as json class GqlSchemaProvider
 
     ::hTypeCache[cTable] := oType
     return oType
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -123,7 +119,6 @@ method reload() as object class GqlSchemaProvider
     ::hTypeCache        := JsonObject():New()
     ::nCacheBuiltAt      := 0
     return self
-endmethod
 
 method expireIfStale() as object class GqlSchemaProvider
     local nTtl := ::oConfig:getSchemaCacheTtlSeconds()
@@ -131,6 +126,4 @@ method expireIfStale() as object class GqlSchemaProvider
         ::reload()
     endif
     return self
-endmethod
 
-endnamespace

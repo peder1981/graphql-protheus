@@ -1,0 +1,34 @@
+{
+    "data": {
+        "SA1": [
+            {
+                "A1_COD": "000902",
+                "A1_LOJA": "01",
+                "A1_NOME": "LOJA DEMO SCREENSHOT                              ",
+                "A1_CGC": "              ",
+                "A1_MUN": "                                                            "
+            },
+            {
+                "A1_COD": "000903",
+                "A1_LOJA": "01",
+                "A1_NOME": "LOJA DEMO SCREENSHOT                              ",
+                "A1_CGC": "              ",
+                "A1_MUN": "                                                            "
+            },
+            {
+                "A1_COD": "000904",
+                "A1_LOJA": "01",
+                "A1_NOME": "LOJA SCREENSHOT FINAL                             ",
+                "A1_CGC": "              ",
+                "A1_MUN": "                                                            "
+            },
+            {
+                "A1_COD": "000990",
+                "A1_LOJA": "01",
+                "A1_NOME": "LOJA TESTE 001                                    ",
+                "A1_CGC": "              ",
+                "A1_MUN": "CURITIBA                                                    "
+            }
+        ]
+    }
+}

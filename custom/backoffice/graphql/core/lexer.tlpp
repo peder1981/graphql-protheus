@@ -4,10 +4,10 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlLexer - tokenizes GraphQL query text into {kind, value} tokens.
+@desc GqlLexer - tokeniza o texto de consulta GraphQL em tokens {kind, value}.
       kind: NAME, INT, FLOAT, STRING, PUNCT, EOF.
 /@*/
 class GqlLexer
@@ -33,20 +33,17 @@ method new(cSource as character) as object class GqlLexer
     ::nLen    := len(cSource)
     ::oPeeked := nil
     return self
-endmethod
 
 method peek() as json class GqlLexer
     if ::oPeeked == nil
         ::oPeeked := ::scan()
     endif
     return ::oPeeked
-endmethod
 
 method nextToken() as json class GqlLexer
     local oTok := ::peek() as json
     ::oPeeked := nil
     return oTok
-endmethod
 
 method skipIgnored() as object class GqlLexer
     local cCh := "" as character
@@ -63,11 +60,9 @@ method skipIgnored() as object class GqlLexer
         endif
     enddo
     return self
-endmethod
 
 method scan() as json class GqlLexer
-    local cCh   := "" as character
-    local oTok  as json
+    local cCh := "" as character
 
     ::skipIgnored()
 
@@ -87,7 +82,6 @@ method scan() as json class GqlLexer
 
     ::nPos++
     return ::makeToken("PUNCT", cCh)
-endmethod
 
 method scanName() as json class GqlLexer
     local nStart := ::nPos as numeric
@@ -103,13 +97,12 @@ method scanName() as json class GqlLexer
     enddo
 
     return ::makeToken("NAME", substr(::cSource, nStart, ::nPos - nStart))
-endmethod
 
 method scanString() as json class GqlLexer
     local cResult := "" as character
     local cCh     := "" as character
 
-    ::nPos++ // opening quote
+    ::nPos++ // aspa de abertura
     while ::nPos <= ::nLen
         cCh := substr(::cSource, ::nPos, 1)
         if cCh == '"'
@@ -132,8 +125,7 @@ method scanString() as json class GqlLexer
         endif
     enddo
 
-    return ::makeToken("STRING", cResult) // unterminated: parser reports the error
-endmethod
+    return ::makeToken("STRING", cResult) // não terminada: o parser reporta o erro
 
 method scanNumber() as json class GqlLexer
     local nStart  := ::nPos as numeric
@@ -161,13 +153,10 @@ method scanNumber() as json class GqlLexer
     endif
 
     return ::makeToken(cKind, substr(::cSource, nStart, ::nPos - nStart))
-endmethod
 
 method makeToken(cKind as character, cValue as character) as json class GqlLexer
     local oTok := JsonObject():New() as json
     oTok["kind"] := cKind
     oTok["value"] := cValue
     return oTok
-endmethod
 
-endnamespace

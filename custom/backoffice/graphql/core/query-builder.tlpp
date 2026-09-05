@@ -9,16 +9,16 @@ namespace custom.backoffice.graphql
 @since 3.0.0
 @desc GqlQueryBuilder - turns a table name, a scalar field list and parsed
       GraphQL arguments into a paginated SQL query string. Every query
-      unconditionally gets the filial and D_E_L_E_T_ = ' ' filters â€” the
+      unconditionally gets the filial and D_E_L_E_T_ = ' ' filters — the
       caller cannot override or omit them (this environment runs on
       PostgreSQL, whose MVCC needs no lock hint on reads, so %nolock% is
-      not used here â€” see Global Constraints). This environment's query
+      not used here — see Global Constraints). This environment's query
       execution path (`TCQuery ... New Alias &cAlias`, from `topconn.ch`)
       has no bind-parameter support, so every value that reaches the SQL
-      text goes through EscapeValue() (single-quote doubling) first â€”
+      text goes through EscapeValue() (single-quote doubling) first —
       never raw string concatenation of client-supplied values.
       ponytail: pagination uses ROW_NUMBER() OVER (ORDER BY <SIX order 1>)
-      wrapped in a subquery â€” portable across the SQL Server/Oracle/
+      wrapped in a subquery — portable across the SQL Server/Oracle/
       PostgreSQL backends Protheus targets. Add cursor pagination if
       offset-based paging on huge tables becomes a measured bottleneck.
 /@*/
@@ -38,7 +38,6 @@ endclass
 method new(oConfig as object) as object class GqlQueryBuilder
     ::oConfig := oConfig
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -47,7 +46,7 @@ endmethod
 @param cTable Character - table alias
 @param cFilialField Character - the real branch field name for cTable
        (e.g. "A1_FILIAL" for "SA1"; see GqlDictionaryReader:getFilialField()
-       â€” never the same as cTable + "_FILIAL", the field prefix and the
+       — never the same as cTable + "_FILIAL", the field prefix and the
        table alias are not the same string)
 @param aScalarFields Array - field names to select
 @param oArgs JSON - parsed GraphQL arguments (limit, offset, filter)
@@ -82,18 +81,17 @@ method build(cTable as character, cFilialField as character, aScalarFields as ar
         cWhere += " AND " + cExtraWhere
     endif
 
-    // cOrderKey arrives in Protheus's own SIX chave format ("+"-joined,
-    // e.g. "A1_FILIAL+A1_COD+A1_LOJA") - not valid SQL syntax on its own
-    // ("+" means arithmetic addition between character columns in
-    // PostgreSQL, not concatenation). Convert to a comma-separated column
-    // list for ORDER BY.
+    // cOrderKey chega no formato de chave SIX próprio do Protheus
+    // ("+"-unido, ex. "A1_FILIAL+A1_COD+A1_LOJA") - não é sintaxe SQL
+    // válida por si só ("+" significa adição aritmética entre colunas
+    // caracteres no PostgreSQL, não concatenação). Converte para uma
+    // lista de colunas separadas por vírgula para o ORDER BY.
     cSql := "SELECT " + cSelect + " FROM (" + ;
              "SELECT " + cSelect + ", ROW_NUMBER() OVER (ORDER BY " + StrTran(cOrderKey, "+", ", ") + ") AS GQL_RN" + ;
              " FROM " + RetSqlName(cTable) + " WHERE " + cWhere + ;
              ") GQL_PAGE WHERE GQL_RN > " + cValToChar(nOffset) + " AND GQL_RN <= " + cValToChar(nOffset + nLimit)
 
     return cSql
-endmethod
 
 method resolveLimit(oArgs as json) as numeric class GqlQueryBuilder
     local nLimit := ::oConfig:getDefaultPageSize() as numeric
@@ -104,14 +102,12 @@ method resolveLimit(oArgs as json) as numeric class GqlQueryBuilder
         nLimit := ::oConfig:getMaxPageSize()
     endif
     return nLimit
-endmethod
 
 method resolveOffset(oArgs as json) as numeric class GqlQueryBuilder
     if oArgs["offset"] != nil
         return oArgs["offset"]["value"]
     endif
     return 0
-endmethod
 
 method applyFilters(oArgs as json) as character class GqlQueryBuilder
     local oFilterArg := oArgs["filter"] as json
@@ -143,7 +139,6 @@ method applyFilters(oArgs as json) as character class GqlQueryBuilder
     next nI
 
     return cResult
-endmethod
 
 method opToSql(cOp as character) as character class GqlQueryBuilder
     if cOp == "eq"
@@ -157,8 +152,7 @@ method opToSql(cOp as character) as character class GqlQueryBuilder
     elseif cOp == "lte"
         return "<="
     endif
-    return "=" // GqlValidator already rejects unsupported operators before build() runs
-endmethod
+    return "=" // o GqlValidator já rejeita operadores não suportados antes de build() rodar
 
 method joinFields(aFields as array) as character class GqlQueryBuilder
     local cResult := "" as character
@@ -170,7 +164,6 @@ method joinFields(aFields as array) as character class GqlQueryBuilder
         cResult += aFields[nI]
     next nI
     return cResult
-endmethod
 
 /*/{Protheus.doc}
 @type Static Function
@@ -182,6 +175,4 @@ endmethod
 /@*/
 method EscapeValue(cValue as character) as character class GqlQueryBuilder
     return StrTran(cValue, "'", "''")
-endmethod
 
-endnamespace

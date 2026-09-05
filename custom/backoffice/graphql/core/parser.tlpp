@@ -4,11 +4,11 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlParser - recursive-descent parser building a GraphQL AST (as JSON)
-      from a GqlLexer token stream.
+@desc GqlParser - parser recursivo descendente que monta uma AST GraphQL
+      (como JSON) a partir do fluxo de tokens do GqlLexer.
 /@*/
 class GqlParser
     private data oLexer  as object
@@ -31,11 +31,9 @@ method new(cSource as character) as object class GqlParser
     ::oLexer  := GqlLexer():new(cSource)
     ::aErrors := {}
     return self
-endmethod
 
 method getErrors() as array class GqlParser
     return ::aErrors
-endmethod
 
 method parse() as json class GqlParser
         local aDefs := {} as array
@@ -52,7 +50,6 @@ method parse() as json class GqlParser
         oDoc["kind"] := "Document"
         oDoc["definitions"] := aDefs
         return oDoc
-    endmethod
 
     method parseOperation() as json class GqlParser
         local oTok  := ::oLexer:peek() as json
@@ -64,7 +61,7 @@ method parse() as json class GqlParser
             ::oLexer:nextToken()
             oTok := ::oLexer:peek()
             if oTok["kind"] == "NAME"
-                ::oLexer:nextToken() // optional operation name, discarded (not needed by the executor)
+                ::oLexer:nextToken() // nome de operação opcional, descartado (não necessário ao executor)
             endif
         endif
 
@@ -73,7 +70,6 @@ method parse() as json class GqlParser
         oOp["operation"] := cOp
         oOp["selectionSet"] := ::parseSelectionSet()
         return oOp
-    endmethod
 
     method parseSelectionSet() as array class GqlParser
         local aFields := {} as array
@@ -91,7 +87,6 @@ method parse() as json class GqlParser
 
         ::expectPunct("}")
         return aFields
-    endmethod
 
     method parseField() as json class GqlParser
         local oTok    := ::oLexer:nextToken() as json
@@ -135,7 +130,6 @@ method parse() as json class GqlParser
         endif
 
         return oField
-    endmethod
 
     method parseArguments() as json class GqlParser
         local oArgs := JsonObject():New() as json
@@ -161,7 +155,6 @@ method parse() as json class GqlParser
         ::expectPunct(")")
 
         return oArgs
-    endmethod
 
     method parseValue() as json class GqlParser
         local oTok := ::oLexer:nextToken() as json
@@ -197,7 +190,6 @@ method parse() as json class GqlParser
         endif
 
         return oVal
-    endmethod
 
     method parseValueList() as array class GqlParser
         local aVals := {} as array
@@ -209,7 +201,6 @@ method parse() as json class GqlParser
         enddo
         ::expectPunct("]")
         return aVals
-    endmethod
 
     method parseObjectValue() as json class GqlParser
         local oObj  := JsonObject():New() as json
@@ -234,7 +225,6 @@ method parse() as json class GqlParser
         ::expectPunct("}")
 
         return oObj
-    endmethod
 
     method expectPunct(cExpected as character) as logical class GqlParser
         local oTok := ::oLexer:nextToken() as json
@@ -243,6 +233,4 @@ method parse() as json class GqlParser
             return .F.
         endif
         return .T.
-    endmethod
 
-endnamespace

@@ -4,10 +4,10 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlErrors - builds the {"errors":[{"message":...}]} response envelope.
+@desc GqlErrors - monta o envelope de resposta {"errors":[{"message":...}]}.
 /@*/
 class GqlErrors
     static method single(cMessage as character) as json
@@ -16,7 +16,6 @@ endclass
 
 method single(cMessage as character) as json class GqlErrors
     return GqlErrors():fromArray({cMessage})
-endmethod
 
 method fromArray(aMessages as array) as json class GqlErrors
     local aErrors := {} as array
@@ -33,6 +32,4 @@ method fromArray(aMessages as array) as json class GqlErrors
     oResult := JsonObject():New()
     oResult["errors"] := aErrors
     return oResult
-endmethod
 
-endnamespace

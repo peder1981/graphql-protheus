@@ -4,13 +4,14 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.1.0
-@desc GqlMutationSchema - a table is a valid mutation target only if it is
-      BOTH in the allowMutations config list AND passes the read-path
-      deny-list (GqlSchemaProvider:getType() already returns nil for a
-      denied/unknown table) - never a mutation-only bypass of the deny-list.
+@desc GqlMutationSchema - uma tabela é alvo válido de mutation apenas se
+      estiver AO MESMO TEMPO na lista allowMutations da configuração E
+      passar pela lista de bloqueio de leitura (GqlSchemaProvider:getType()
+      já retorna nil para tabela bloqueada/desconhecida) — nunca há
+      bypass da lista de bloqueio apenas para mutations.
 /@*/
 class GqlMutationSchema
     private data oSchemaProvider as object
@@ -25,7 +26,6 @@ method new(oSchemaProvider as object, oConfig as object) as object class GqlMuta
     ::oSchemaProvider := oSchemaProvider
     ::oConfig         := oConfig
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -43,7 +43,6 @@ method isMutable(cTable as character) as logical class GqlMutationSchema
     endif
 
     return ::oSchemaProvider:getType(cTable) != nil
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -58,6 +57,4 @@ method getMutationType(cTable as character) as json class GqlMutationSchema
         return nil
     endif
     return ::oSchemaProvider:getType(cTable)
-endmethod
 
-endnamespace

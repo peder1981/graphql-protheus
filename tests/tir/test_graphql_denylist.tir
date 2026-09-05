@@ -1,5 +1,5 @@
 """
-TIR Test — deny-list enforcement across introspection surfaces
+Teste TIR — aplicação da lista de bloqueio nas superfícies de introspecção
 """
 from contrib.tir import Webapp
 import json

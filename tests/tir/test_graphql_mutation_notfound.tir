@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL mutation not-found error handling
+Teste TIR — tratamento de erro de mutation (registro não encontrado)
 """
 from contrib.tir import Webapp
 import json

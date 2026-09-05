@@ -4,11 +4,11 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.1.0
-@desc GqlInputValidator - validates a mutation's input object against SX3
-      metadata (required/type/length) before any write happens.
+@desc GqlInputValidator - valida o objeto de entrada de uma mutation contra
+      metadados do SX3 (obrigatório/tipo/tamanho) antes de qualquer escrita.
 /@*/
 class GqlInputValidator
     private data oDictionaryReader as object
@@ -22,7 +22,6 @@ endclass
 method new(oDictionaryReader as object) as object class GqlInputValidator
     ::oDictionaryReader := oDictionaryReader
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -60,7 +59,6 @@ method validateCreate(cTable as character, oInput as json) as array class GqlInp
     next nI
 
     return aErrors
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -89,7 +87,6 @@ method validateUpdate(cTable as character, oInput as json) as array class GqlInp
     next nI
 
     return aErrors
-endmethod
 
 method validateField(oFieldMeta as json, uValue as variant, aErrors as array) as object class GqlInputValidator
     local cType   := oFieldMeta["sx3Type"] as character
@@ -113,6 +110,4 @@ method validateField(oFieldMeta as json, uValue as variant, aErrors as array) as
     endif
 
     return self
-endmethod
 
-endnamespace

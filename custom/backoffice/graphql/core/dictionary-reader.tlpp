@@ -5,12 +5,12 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlDictionaryReader - raw read access to SX2 (tables) and SX3 (fields),
-      filtered through GqlAccessControl. No caching here â€” caching is
-      GqlSchemaProvider's job.
+@desc GqlDictionaryReader - leitura crua de SX2 (tabelas) e SX3 (campos),
+      filtrada pelo GqlAccessControl. Sem cache aqui — o cache é
+      responsabilidade do GqlSchemaProvider.
 /@*/
 class GqlDictionaryReader
     private data oAccessControl as object
@@ -27,7 +27,6 @@ endclass
 method new(oAccessControl as object) as object class GqlDictionaryReader
     ::oAccessControl := oAccessControl
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -58,7 +57,6 @@ method listTables() as array class GqlDictionaryReader
     (cAlq)->(dbCloseArea())
 
     return aResult
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -98,7 +96,6 @@ method getTableFields(cTable as character) as array class GqlDictionaryReader
     (cAlq)->(dbCloseArea())
 
     return aResult
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -122,7 +119,6 @@ method mapScalarType(cSx3Type as character, nDecimal as numeric) as character cl
         return "String"
     endif
     return "String"
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -143,9 +139,10 @@ method getRelations(cTable as character) as array class GqlDictionaryReader
     local cCardinality := "" as character
 
     if empty(cSx9Table)
-        // ponytail: SX9 not registered in every Protheus deployment (confirmed
-        // empty RetSqlName against the live server this plan was verified
-        // against) - degrade to "no relations" instead of a malformed query.
+        // ponytail: SX9 não está registrada em todo deploy do Protheus
+        // (RetSqlName vazio confirmado contra o servidor real em que este
+        // plano foi verificado) - degrada para "sem relacionamentos" em
+        // vez de uma consulta malformada.
         return aResult
     endif
 
@@ -174,7 +171,6 @@ method getRelations(cTable as character) as array class GqlDictionaryReader
     (cAlq)->(dbCloseArea())
 
     return aResult
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -206,18 +202,19 @@ method getOrderKey(cTable as character) as character class GqlDictionaryReader
     endif
 
     if empty(cKey)
-        // ponytail: SIX isn't registered as a resolvable alias via
-        // RetSqlName() in every Protheus deployment (confirmed against the
-        // live server this plan was verified against), even when its
-        // physical table genuinely exists with real data. Its physical
-        // Postgres columns are also unprefixed (chave/indice/ordem, unlike
-        // every other dictionary table's x3_-style prefix) - confirmed
-        // directly against six990 in this environment. Derive the physical
-        // table name from RetSqlName("SX3")'s own company suffix (e.g.
-        // SX3990 -> SIX990 - the same suffix every core dictionary table
-        // shares) and query it with the real bare column names, rather
-        // than trusting RetSqlName("SIX") or the X6_-prefixed column names
-        // the primary path above uses.
+        // ponytail: SIX não está registrada como alias resolvível via
+        // RetSqlName() em todo deploy do Protheus (confirmado contra o
+        // servidor real em que este plano foi verificado), mesmo quando
+        // sua tabela física existe de verdade com dados reais. As colunas
+        // físicas do Postgres também são sem prefixo (chave/indice/ordem,
+        // ao contrário do prefixo x3_ de todas as outras tabelas de
+        // dicionário) - confirmado diretamente contra six990 neste
+        // ambiente. Deriva o nome físico da tabela a partir do sufixo de
+        // empresa de RetSqlName("SX3") (ex. SX3990 -> SIX990 - o mesmo
+        // sufixo que toda tabela central de dicionário compartilha) e a
+        // consulta com os nomes de coluna reais e sem prefixo, em vez de
+        // confiar em RetSqlName("SIX") ou nos nomes de coluna prefixados
+        // X6_ usados no caminho primário acima.
         cSx3Table := RetSqlName("SX3")
         if len(cSx3Table) > 3
             cQuery := "SELECT chave AS RKEY FROM SIX" + substr(cSx3Table, 4) + ;
@@ -240,7 +237,6 @@ method getOrderKey(cTable as character) as character class GqlDictionaryReader
         return aFields[1]["name"]
     endif
     return ""
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -272,6 +268,4 @@ method getFilialField(cTable as character) as character class GqlDictionaryReade
     (cAlq)->(dbCloseArea())
 
     return cResult
-endmethod
 
-endnamespace

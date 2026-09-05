@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL create mutation
+Teste TIR — mutation de criação GraphQL
 """
 from contrib.tir import Webapp
 import json
@@ -21,7 +21,7 @@ class TestGraphQLMutationCreate:
         assert data["data"]["createSA1"]["A1_COD"] == "ZZ0001"
         assert data["data"]["createSA1"]["A1_NOME"] == "Mutation Test"
 
-        # Verify creation via read query
+        # Verifica a criação via consulta de leitura
         verify_gql = '{ SA1(filter: [{field: "A1_COD", op: "eq", value: "ZZ0001"}]) { A1_COD A1_NOME } }'
         verify_result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(verify_gql))
         verify_data = json.loads(verify_result.text)

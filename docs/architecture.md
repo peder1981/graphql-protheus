@@ -1,6 +1,6 @@
-# Architecture
+# Arquitetura
 
-Request pipeline:
+Pipeline de requisição:
 
 ```
 GET /graphql --> GQLSERVICE (entrypoints/service.entrypoint.tlpp)
@@ -9,62 +9,69 @@ GET /graphql --> GQLSERVICE (entrypoints/service.entrypoint.tlpp)
              --> GqlExecutor (core/executor.tlpp)
                  --> GqlQueryBuilder (core/query-builder.tlpp)
                  --> GqlDictionaryReader (core/dictionary-reader.tlpp)
-             --> JSON response
+             --> Resposta JSON
 ```
 
-Schema is never hand-written: `GqlSchemaProvider` (core/schema-provider.tlpp)
-builds GraphQL types lazily from SX2 (tables) and SX3 (fields), and
-relationship fields from SX9. Tables/fields are filtered by
-`GqlAccessControl` (core/access-control.tlpp) against
-`config/graphql-config.json`'s deny-lists before anything is cached.
+O schema nunca é escrito à mão: `GqlSchemaProvider` (core/schema-provider.tlpp)
+monta os tipos GraphQL de forma preguiçosa a partir de SX2 (tabelas) e SX3
+(campos), e os campos de relacionamento a partir de SX9. Tabelas/campos são
+filtrados pelo `GqlAccessControl` (core/access-control.tlpp) contra as
+listas de bloqueio do `config/graphql-config.json` antes de qualquer cache.
 
-Per-user permission checks are out of scope for this sub-project; the Auth
-sub-project will add them, likely as another method on `GqlAccessControl`.
+Verificações de permissão por usuário estão fora do escopo deste
+sub-projeto; o sub-projeto Auth vai adicioná-las, provavelmente como
+outro método no `GqlAccessControl`.
 
 ## Mutations
 
-`GqlMutationExecutor` (core/mutation-executor.tlpp) is a parallel write
-pipeline alongside the read executor, sharing the same lexer/parser and
-the same `GqlDictionaryReader`/`GqlQueryBuilder`. It writes via
-`TCSqlExec()` — **not** `TCQuery`, which crashes uncatchably on anything
-but `SELECT` in this environment (confirmed empirically; see the plan's
-Global Constraints for the full investigation) — and re-selects the
-affected row through the existing `GqlExecutor:resolveTableField()` so
-response shaping (aliases, nested selections) is never duplicated.
+`GqlMutationExecutor` (core/mutation-executor.tlpp) é um pipeline de
+escrita paralelo ao executor de leitura, compartilhando o mesmo
+lexer/parser e o mesmo `GqlDictionaryReader`/`GqlQueryBuilder`. Ele
+escreve via `TCSqlExec()` — **não** via `TCQuery`, que quebra de forma
+não-capturável com qualquer coisa que não seja `SELECT` neste ambiente
+(confirmado empiricamente; veja as Restrições Globais do plano para a
+investigação completa) — e reseleciona a linha afetada através do
+`GqlExecutor:resolveTableField()` existente, de modo que a moldagem da
+resposta (aliases, seleções aninhadas) nunca é duplicada.
 
-A table is writable only if it's in `allowMutations` (config) AND still
-passes the read-path deny-list — the two gates combine, neither alone is
-sufficient. `GqlInputValidator` checks required/type/length against SX3
-metadata before any SQL runs. Delete is always soft
-(`D_E_L_E_T_ = '*'`), matching how every query already filters reads.
+Uma tabela é gravável apenas se estiver em `allowMutations` (configuração)
+E ainda passar pela lista de bloqueio do caminho de leitura — as duas
+condições se combinam, nenhuma sozinha é suficiente. `GqlInputValidator`
+verifica obrigatoriedade/tipo/tamanho contra os metadados do SX3 antes de
+qualquer SQL rodar. Exclusão é sempre lógica (`D_E_L_E_T_ = '*'`),
+coerente com como toda consulta já filtra leituras.
 
-Unknown or denied input fields are currently silently ignored, not
-rejected with an explicit error: `GqlValidator` is never invoked on the
-mutation path, so a field name that isn't part of the dictionary-driven
-SET/INSERT field lists is simply excluded when those lists are built —
-it never reaches SQL, so this isn't a security hole, but it does diverge
-from normal GraphQL semantics (an unknown input-object field should be a
-validation error). Closing this is deferred to a future sub-project's
-per-field mutation argument validation.
+Campos de entrada desconhecidos ou bloqueados são atualmente ignorados
+silenciosamente, não rejeitados com erro explícito: `GqlValidator` nunca é
+invocado no caminho de mutation, então um nome de campo que não faz parte
+das listas SET/INSERT guiadas pelo dicionário é simplesmente excluído
+quando essas listas são montadas — nunca chega ao SQL, então isso não é
+um furo de segurança, mas diverge da semântica normal do GraphQL (um
+campo desconhecido em um objeto de entrada deveria ser um erro de
+validação). Fechar isso fica para a validação de argumentos de mutation
+por campo de um sub-projeto futuro.
 
-### Known limitation: Concurrency and `R_E_C_N_O_` assignment
+### Limitação conhecida: Concorrência e atribuição de `R_E_C_N_O_`
 
-`create` mutations assign `R_E_C_N_O_` (the table's physical primary key on
-this raw-SQL write path, since normal ISAM/DBAccess auto-assignment is
-bypassed) via a `MAX(R_E_C_N_O_)+1` SQL subquery. This is **not safe under
-concurrent writes** — two simultaneous `create` calls against the same table
-can race and attempt to insert the same `R_E_C_N_O_` value, causing a
-primary key collision.
+Mutations `create` atribuem `R_E_C_N_O_` (a chave primária física da
+tabela neste caminho de escrita com SQL cru, já que a atribuição
+automática normal do ISAM/DBAccess é contornada) via uma subconsulta SQL
+`MAX(R_E_C_N_O_)+1`. Isso **não é seguro sob escrita concorrente** — duas
+chamadas `create` simultâneas contra a mesma tabela podem entrar em
+corrida e tentar inserir o mesmo valor de `R_E_C_N_O_`, causando colisão
+de chave primária.
 
-Both a real Postgres sequence/IDENTITY column and a same-statement
-advisory-lock approach were investigated and found unavailable/ineffective
-in this environment. Closing this gap requires a database migration (adding
-real sequences/IDENTITY columns to Protheus dictionary tables) or a
-server-side stored procedure — both out of scope for this sub-project.
+Tanto uma sequência/IDENTITY real do Postgres quanto uma abordagem de
+advisory lock na mesma instrução foram investigadas e consideradas
+indisponíveis/ineficazes neste ambiente. Fechar essa lacuna exige uma
+migração de banco (adicionar sequências/IDENTITY reais às tabelas de
+dicionário do Protheus) ou uma stored procedure no servidor — ambos fora
+do escopo deste sub-projeto.
 
-**Current safety guarantee**: Safe for single-request and low-concurrency
-use (e.g., this sub-project's own testing). **Not safe** for concurrent
-production traffic on the same table.
+**Garantia de segurança atual**: seguro para uso de requisição única e
+baixa concorrência (ex.: os próprios testes deste sub-projeto). **Não
+seguro** para tráfego de produção concorrente na mesma tabela.
 
-See `custom/backoffice/graphql/core/mutation-builder.tlpp`'s `buildInsert()`
-Protheus.doc header for the full technical analysis.
+Veja o cabeçalho Protheus.doc de `buildInsert()` em
+`custom/backoffice/graphql/core/mutation-builder.tlpp` para a análise
+técnica completa.

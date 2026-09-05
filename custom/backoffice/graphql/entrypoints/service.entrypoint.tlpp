@@ -4,14 +4,14 @@
 
 /*/{Protheus.doc}
 GQLSERVICE
-Dynamic GraphQL REST endpoint over the Protheus data dictionary.
-GET /rest/graphql              -> schema type names (deny-list applied)
-GET /rest/graphql?type=<TABLE> -> full type detail for one table
-GET /rest/graphql?query=<...>  -> full query execution (Task 9)
+Ponto de entrada REST GraphQL dinâmico sobre o dicionário de dados do Protheus.
+GET /rest/graphql              -> nomes dos tipos do schema (lista de bloqueio aplicada)
+GET /rest/graphql?type=<TABLE> -> detalhe completo do tipo de uma tabela
+GET /rest/graphql?query=<...>  -> execução completa da consulta
 @type User Function
 @author GraphQL Engine Team
 @since 3.0.0
-@return Logical - .T.
+@return Logico - .T.
 /*/
 @Get("/graphql")
 User Function GQLSERVICE() as logical

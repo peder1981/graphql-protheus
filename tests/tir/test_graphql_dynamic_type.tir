@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL dynamic type detail (SX3-driven), deny-list on fields
+Teste TIR — detalhe de tipo dinâmico GraphQL (guiado por SX3), lista de bloqueio em campos
 """
 from contrib.tir import Webapp
 import json

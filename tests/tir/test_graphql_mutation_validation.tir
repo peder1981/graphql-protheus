@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL mutation validation
+Teste TIR — validação de mutation GraphQL
 """
 from contrib.tir import Webapp
 import json

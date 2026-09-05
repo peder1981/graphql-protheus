@@ -1,18 +1,19 @@
-# Configuration
+# Configuração
 
 `custom/backoffice/graphql/config/graphql-config.json`:
 
-| Key | Type | Meaning |
+| Chave | Tipo | Significado |
 |---|---|---|
-| `denyTables` | array of wildcard strings | Table aliases never exposed, e.g. `"SRH*"` |
-| `denyFields` | array of wildcard strings | Field names never exposed, e.g. `"*SENHA*"` |
-| `allowMutations` | array of table aliases (no wildcard) | Tables that accept `createTABLE`/`updateTABLE`/`deleteTABLE` mutations; empty by default (all tables read-only) |
-| `pagination.defaultPageSize` | number | `limit` used when the query omits it |
-| `pagination.maxPageSize` | number | Hard cap on `limit`, even if the query asks for more |
-| `schemaCacheTtlSeconds` | number | How long a table's generated type stays cached before automatic rebuild |
+| `denyTables` | array de strings com curinga | Aliases de tabela nunca expostos, ex. `"SRH*"` |
+| `denyFields` | array de strings com curinga | Nomes de campo nunca expostos, ex. `"*SENHA*"` |
+| `allowMutations` | array de aliases de tabela (sem curinga) | Tabelas que aceitam mutations `createTABLE`/`updateTABLE`/`deleteTABLE`; vazio por padrão (todas as tabelas somente leitura) |
+| `pagination.defaultPageSize` | número | `limit` usado quando a consulta o omite |
+| `pagination.maxPageSize` | número | Teto rígido de `limit`, mesmo que a consulta peça mais |
+| `schemaCacheTtlSeconds` | número | Tempo que o tipo gerado de uma tabela fica em cache antes de ser reconstruído automaticamente |
 
-Wildcards support `*` as "any run of characters" (applies to `denyTables` and
-`denyFields` only; `allowMutations` takes exact table aliases). Denied
-tables/fields never appear in introspection or query results, regardless of
-query shape. A table requires **both** `allowMutations` entry **and** absence
-from `denyTables` to be writable — the two gates combine.
+Os curingas suportam `*` como "qualquer sequência de caracteres" (aplica-se
+apenas a `denyTables` e `denyFields`; `allowMutations` usa aliases exatos de
+tabela). Tabelas/campos bloqueados nunca aparecem em introspecção nem em
+resultados de consulta, independentemente da forma da query. Uma tabela
+exige **ambos** o registro em `allowMutations` **e** ausência de
+`denyTables` para ser gravável — as duas condições se combinam.

@@ -1,0 +1,1823 @@
+{
+    "data": {
+        "__type": {
+            "name": "SA1",
+            "fields": [
+                {
+                    "name": "A1_FILIAL",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_COD",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_LOJA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_NOME",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 50,
+                    "required": false
+                },
+                {
+                    "name": "A1_PESSOA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_END",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 80,
+                    "required": false
+                },
+                {
+                    "name": "A1_NREDUZ",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 20,
+                    "required": false
+                },
+                {
+                    "name": "A1_BAIRRO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_TIPO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_EST",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_ESTADO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 20,
+                    "required": false
+                },
+                {
+                    "name": "A1_COD_MUN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_CEP",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_MUN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_REGIAO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSCREG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_NATUREZ",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 10,
+                    "required": false
+                },
+                {
+                    "name": "A1_IBGE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 11,
+                    "required": false
+                },
+                {
+                    "name": "A1_DDI",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_ENDCOB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_DDD",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_ENDENT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_COMPENT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 50,
+                    "required": false
+                },
+                {
+                    "name": "A1_TRIBFAV",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_TEL",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_ENDREC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_CONTATO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_CGC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 14,
+                    "required": false
+                },
+                {
+                    "name": "A1_FAX",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_TELEX",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 10,
+                    "required": false
+                },
+                {
+                    "name": "A1_PFISICA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 18,
+                    "required": false
+                },
+                {
+                    "name": "A1_INSCR",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 18,
+                    "required": false
+                },
+                {
+                    "name": "A1_PAIS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_INSCRM",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 18,
+                    "required": false
+                },
+                {
+                    "name": "A1_VEND",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_PAISDES",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 25,
+                    "required": false
+                },
+                {
+                    "name": "A1_COMIS",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_CONTA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 20,
+                    "required": false
+                },
+                {
+                    "name": "A1_BCO1",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_BCO2",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_BCO3",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_BCO4",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_BCO5",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_TRANSP",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPFRET",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_COND",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_DESC",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_PRIOR",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RISCO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_LC",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 14,
+                    "required": false
+                },
+                {
+                    "name": "A1_VENCLC",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_CLASSE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_LCFIN",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 14,
+                    "required": false
+                },
+                {
+                    "name": "A1_MOEDALC",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_MSALDO",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_MCOMPRA",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_METR",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 7,
+                    "required": false
+                },
+                {
+                    "name": "A1_PRICOM",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_ULTCOM",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_NROCOM",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_FORMVIS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_TEMVIS",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_ULTVIS",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_TMPVIS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_CLASVEN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_TMPSTD",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_MENSAGE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_SALDUP",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_RECISS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_NROPAG",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 4,
+                    "required": false
+                },
+                {
+                    "name": "A1_SALPEDL",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_TRANSF",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_SUFRAMA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 12,
+                    "required": false
+                },
+                {
+                    "name": "A1_ATR",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_VACUM",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_SALPED",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_TITPROT",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_DTULTIT",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_CHQDEVO",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_MATR",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 4,
+                    "required": false
+                },
+                {
+                    "name": "A1_DTULCHQ",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_MAIDUPL",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_TABELA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_INCISS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_SALDUPM",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_PAGATR",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_CXPOSTA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 20,
+                    "required": false
+                },
+                {
+                    "name": "A1_ATIVIDA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 7,
+                    "required": false
+                },
+                {
+                    "name": "A1_CARGO1",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_CARGO2",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_CARGO3",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_SUPER",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_RTEC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_ALIQIR",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_RG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_OBSERV",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_CALCSUF",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_DTNASC",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_SALPEDB",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_CLIFAT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_GRPTRIB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_BAIRROC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 30,
+                    "required": false
+                },
+                {
+                    "name": "A1_CEPC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_MUNC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_ESTC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_CEPE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_BAIRROE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 20,
+                    "required": false
+                },
+                {
+                    "name": "A1_MUNE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_ESTE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_SATIV1",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSATIV1",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_SATIV2",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODPAIS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSATIV2",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPISSRS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODLOC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPESSOA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_SATIV3",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSATIV3",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_SATIV4",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSATIV4",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_SATIV5",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSATIV5",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_SATIV6",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSATIV6",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_SATIV7",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSATIV7",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_SATIV8",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSATIV8",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODMARC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODAGE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_VM_MARC",
+                    "sx3Type": "M",
+                    "graphqlType": "String",
+                    "maxLength": 20,
+                    "required": false
+                },
+                {
+                    "name": "A1_COMAGE",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_TIPCLI",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_DEST_1",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_EMAIL",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 30,
+                    "required": false
+                },
+                {
+                    "name": "A1_DEST_2",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODMUN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_HPAGE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 30,
+                    "required": false
+                },
+                {
+                    "name": "A1_DEST_3",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_CBO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 7,
+                    "required": false
+                },
+                {
+                    "name": "A1_CNAE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 9,
+                    "required": false
+                },
+                {
+                    "name": "A1_CONDPAG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_DIASPAG",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 3,
+                    "required": false
+                },
+                {
+                    "name": "A1_DESCPAG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_OBS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_VM_OBS",
+                    "sx3Type": "M",
+                    "graphqlType": "String",
+                    "maxLength": 60,
+                    "required": false
+                },
+                {
+                    "name": "A1_AGREG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 4,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODHIST",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_RECINSS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RECCOFI",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RECCSLL",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RECPIS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_HISTMK",
+                    "sx3Type": "M",
+                    "graphqlType": "String",
+                    "maxLength": 35,
+                    "required": false
+                },
+                {
+                    "name": "A1_TIPPER",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_SALFIN",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_CONTAB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_SALFINM",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 16,
+                    "required": false
+                },
+                {
+                    "name": "A1_B2B",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_GRPVEN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_MSBLQL",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_INSCRUR",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 18,
+                    "required": false
+                },
+                {
+                    "name": "A1_CLICNV",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_COMPLEM",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 50,
+                    "required": false
+                },
+                {
+                    "name": "A1_HRCAD",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_DTCAD",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_CLIPRI",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_LOJPRI",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODSEG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DESSEG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_NUMRA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_SITUA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_SUBCOD",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_CDRDES",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_REGDES",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 30,
+                    "required": false
+                },
+                {
+                    "name": "A1_FILDEB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODFOR",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 15,
+                    "required": false
+                },
+                {
+                    "name": "A1_ABICS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 4,
+                    "required": false
+                },
+                {
+                    "name": "A1_BLEMAIL",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_TIPOCLI",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_VINCULO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_DTINIV",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_DTFIMV",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_LOCCONS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODMUNE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_PERFIL",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_HRTRANS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_UNIDVEN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_TIPPRFL",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_PRF_VLD",
+                    "sx3Type": "D",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_PRF_COD",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_PRF_OBS",
+                    "sx3Type": "M",
+                    "graphqlType": "String",
+                    "maxLength": 10,
+                    "required": false
+                },
+                {
+                    "name": "A1_REGPB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPREG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_USADDA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_SIMPLES",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_MSEXP",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_NIF",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODSIAF",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 4,
+                    "required": false
+                },
+                {
+                    "name": "A1_INDRET",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_ENDNOT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_CEINSS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 14,
+                    "required": false
+                },
+                {
+                    "name": "A1_IDHIST",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 20,
+                    "required": false
+                },
+                {
+                    "name": "A1_FRETISS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_CTARE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RESERVE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_IRBAX",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_ORIGEM",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_IPWEB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 20,
+                    "required": false
+                },
+                {
+                    "name": "A1_PERCATM",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_REGESIM",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_ABATIMP",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_PERFECP",
+                    "sx3Type": "N",
+                    "graphqlType": "Float",
+                    "maxLength": 5,
+                    "required": false
+                },
+                {
+                    "name": "A1_IENCONT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODMEMB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 14,
+                    "required": false
+                },
+                {
+                    "name": "A1_CHVCAM",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 14,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODTER",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_ORIGCT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_ALIFIXA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPMEMB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_NOMTER",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_ENTORI",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_CRDMA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_DSCMEMB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 100,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPDP",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RFABOV",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RFACS",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_PRSTSER",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_SIMPNAC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPNFSE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_ENTID",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_MATFUN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 6,
+                    "required": false
+                },
+                {
+                    "name": "A1_DESCAM",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_CODFID",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 40,
+                    "required": false
+                },
+                {
+                    "name": "A1_MINIRF",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_USERLGI",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 17,
+                    "required": false
+                },
+                {
+                    "name": "A1_USERLGA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 17,
+                    "required": false
+                },
+                {
+                    "name": "A1_INCULT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_HREXPO",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_FOMEZER",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_ISSRSLC",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RECFET",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RECIRRF",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_TDA",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_INCLTMG",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RIMAMT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RFASEMT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RECFMD",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_OUTRMUN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 10,
+                    "required": false
+                },
+                {
+                    "name": "A1_TIMEKEE",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 8,
+                    "required": false
+                },
+                {
+                    "name": "A1_INOVAUT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_RESFAT",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_NVESTN",
+                    "sx3Type": "N",
+                    "graphqlType": "Int",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPCAMP",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_IDESTN",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 30,
+                    "required": false
+                },
+                {
+                    "name": "A1_IMGUMOV",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 100,
+                    "required": false
+                },
+                {
+                    "name": "A1_TPJ",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                },
+                {
+                    "name": "A1_FILTRF",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 2,
+                    "required": false
+                },
+                {
+                    "name": "A1_CONTRIB",
+                    "sx3Type": "C",
+                    "graphqlType": "String",
+                    "maxLength": 1,
+                    "required": false
+                }
+            ],
+            "relations": []
+        }
+    }
+}

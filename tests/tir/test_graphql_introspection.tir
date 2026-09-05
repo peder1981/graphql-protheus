@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL schema introspection (table names only, deny-list applied)
+Teste TIR — introspecção de schema GraphQL (nomes de tabela, lista de bloqueio aplicada)
 """
 from contrib.tir import Webapp
 import json

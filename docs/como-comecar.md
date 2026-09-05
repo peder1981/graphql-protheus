@@ -98,5 +98,5 @@ e retorna erro de "tabela desconhecida".
 - **`manual-utilizacao.md`** — referência completa da linguagem GraphQL
   suportada: sintaxe de consultas, filtros, paginação, relacionamentos e
   mutations, com exemplos.
-- **`architecture.md`** (em inglês) — arquitetura interna do motor, para
+- **`architecture.md`** — arquitetura interna do motor, para
   quem for estender ou depurar o código.

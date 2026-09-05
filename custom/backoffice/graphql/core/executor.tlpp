@@ -5,11 +5,11 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlExecutor - parses, validates and executes a GraphQL query source,
-      resolving root table fields and SX9-driven nested relationships.
+@desc GqlExecutor - parseia, valida e executa uma consulta GraphQL,
+      resolvendo campos de tabela raiz e relacionamentos aninhados via SX9.
 /@*/
 class GqlExecutor
     private data oSchemaProvider    as object
@@ -30,7 +30,6 @@ method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder
     ::oDictionaryReader := oDictionaryReader
     ::oQueryBuilder     := oQueryBuilder
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -73,7 +72,6 @@ method execute(cQuerySource as character) as json class GqlExecutor
     oResult := JsonObject():New()
     oResult["data"] := oData
     return oResult
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -130,7 +128,6 @@ method resolveTableField(oField as json, cExtraWhere as character) as array clas
     (cAlq)->(dbCloseArea())
 
     return aRows
-endmethod
 
 method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array class GqlExecutor
     local aRelations := ::oDictionaryReader:getRelations(cParentTable) as array
@@ -156,7 +153,6 @@ method resolveRelation(oParentType as json, cParentTable as character, oRelField
     cLocalValue    := GqlQueryBuilder():EscapeValue(cValToChar(oParentRow[cLocalField]))
 
     return ::resolveTableField(oRelField, cForeignField + " = '" + cLocalValue + "'")
-endmethod
 
 method isScalarField(oType as json, cName as character) as logical class GqlExecutor
     local aFields := oType["fields"] as array
@@ -167,7 +163,6 @@ method isScalarField(oType as json, cName as character) as logical class GqlExec
         endif
     next nI
     return .F.
-endmethod
 
 method fieldNames(aSelection as array) as array class GqlExecutor
     local aResult := {} as array
@@ -176,13 +171,10 @@ method fieldNames(aSelection as array) as array class GqlExecutor
         aAdd(aResult, aSelection[nI]["name"])
     next nI
     return aResult
-endmethod
 
 method fieldAlias(oField as json) as character class GqlExecutor
     if oField["alias"] != nil
         return oField["alias"]
     endif
     return oField["name"]
-endmethod
 
-endnamespace

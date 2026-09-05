@@ -1,7 +1,7 @@
-# GraphQL Core Engine (Protheus)
+# Motor Core GraphQL (Protheus)
 
-Dynamic GraphQL server over the Protheus data dictionary (SX2/SX3/SX9),
-running as a TLPP AppServer REST entry point.
+Servidor GraphQL dinâmico sobre o dicionário de dados do Protheus
+(SX2/SX3/SX9), rodando como ponto de entrada REST do AppServer em TLPP.
 
 **Documentação em português brasileiro**: [`docs/como-comecar.md`](docs/como-comecar.md)
 (guia rápido), [`docs/manual-implementacao.md`](docs/manual-implementacao.md)
@@ -10,11 +10,11 @@ running as a TLPP AppServer REST entry point.
 
 ## Endpoint
 
-- `GET /graphql` — schema type names (deny-list applied)
-- `GET /graphql?type=<TABLE>` — full type detail for one table (fields + relations)
-- `GET /graphql?query=<url-encoded GraphQL text>` — execute a query
+- `GET /graphql` — nomes dos tipos do schema (lista de bloqueio aplicada)
+- `GET /graphql?type=<TABELA>` — detalhe completo do tipo de uma tabela (campos + relacionamentos)
+- `GET /graphql?query=<texto GraphQL codificado na URL>` — executa uma consulta
 
-## Example
+## Exemplo
 
 ```
 { SA1(limit: 5, filter: [{field: "A1_COD", op: "eq", value: "000001"}]) {
@@ -26,10 +26,11 @@ running as a TLPP AppServer REST entry point.
 
 ## Mutations
 
-`createTABLE`/`updateTABLE`/`deleteTABLE` are exposed only for tables
-listed in `config/graphql-config.json`'s `allowMutations` (empty by
-default — nothing is writable until an admin opts a table in). Delete is
-always soft (`D_E_L_E_T_ = '*'`), never a real row removal.
+`createTABELA`/`updateTABELA`/`deleteTABELA` são expostos apenas para
+tabelas listadas em `allowMutations` do `config/graphql-config.json`
+(vazio por padrão — nada é gravável até um administrador liberar uma
+tabela). Exclusão é sempre lógica (`D_E_L_E_T_ = '*'`), nunca remoção
+real de linha.
 
 ```
 mutation { createSA1(input: {A1_COD: "000123", A1_LOJA: "01", A1_NOME: "Foo"}) {
@@ -38,33 +39,56 @@ mutation { createSA1(input: {A1_COD: "000123", A1_LOJA: "01", A1_NOME: "Foo"}) {
 } }
 ```
 
-**Known limitation**: See `docs/architecture.md` for a concurrency caveat on `create` mutations.
+**Limitação conhecida**: veja `docs/architecture.md` para uma ressalva
+de concorrência em mutations `create`.
 
-See `docs/architecture.md` and
+Consulte `docs/architecture.md` e
 `docs/superpowers/specs/2026-08-14-graphql-mutations-design.md`.
 
-## Configuration
+## Configuração
 
-See `docs/configuration.md`. **`compile.sh`/`deploy-rpo.sh` only ever handle
-compiled `.tlpp` sources** — `custom/backoffice/graphql/config/graphql-config.json`
-must be copied to the AppServer's `RootPath` separately (check
-`appserver.ini`'s `[P12] RootPath=` — `MemoRead()` resolves relative paths
-against this, not `SourcePath`, confirmed by testing both). Without it, the
-deny-list silently falls back to empty and every table becomes visible —
-confirmed against a live server during development.
+Veja `docs/configuration.md`. **`compile.sh`/`deploy-rpo.sh` lidam apenas
+com fontes `.tlpp` compilados** — `custom/backoffice/graphql/config/graphql-config.json`
+precisa ser copiado para o `RootPath` do AppServer separadamente
+(verifique `[P12] RootPath=` no `appserver.ini`; o `MemoRead()` resolve
+caminhos relativos contra esse `RootPath`, não contra o `SourcePath`,
+confirmado testando ambos). Sem esse arquivo, a lista de bloqueio cai
+silenciosamente para vazia e toda tabela fica visível — confirmado contra
+um servidor real durante o desenvolvimento.
 
-## Architecture
+## Arquitetura
 
-See `docs/architecture.md` and
+Veja `docs/architecture.md` e
 `docs/superpowers/specs/2026-08-13-graphql-core-engine-design.md`.
 
-## Tests
+## Validação ao vivo
 
-TIR (Python e2e) under `tests/tir/`. Run with `pytest tests/tir/ -v`
-against a running Protheus AppServer with this RPO deployed.
+Resultados capturados contra um AppServer Protheus isolado (container
+`protheus-graphql`, REST em `:9996`) — imagens e JSON em
+[`docs/screenshots/`](docs/screenshots/).
 
-## Sub-project roadmap
+| Cenário | Captura |
+|---------|---------|
+| Consulta `{ SA1(limit: 5) { A1_COD A1_LOJA A1_NOME } }` | [`gql-query.png`](docs/screenshots/gql-query.png) / [`query.json`](docs/screenshots/query.json) |
+| Mutation `createSA1` → `updateSA1` → `deleteSA1` (soft-delete) | [`gql-mutation.png`](docs/screenshots/gql-mutation.png) / [`mutation.json`](docs/screenshots/mutation.json) |
+| Introspection `?type=SA1` (campos) | [`gql-introspection.png`](docs/screenshots/gql-introspection.png) / [`introspection.json`](docs/screenshots/introspection.json) |
+| Lista de tipos `GET /graphql` (bloqueio aplicado) | [`gql-schema_list.png`](docs/screenshots/gql-schema_list.png) / [`schema_list.json`](docs/screenshots/schema_list.json) |
 
-This is sub-projects 1-2 of 6: Core Engine + Mutations (this repo) → Auth →
-Field Hooks → SDK Generator → Console PO-UI. See the design specs for the
-full roadmap and how each later sub-project plugs into this engine.
+> **Sobre relacionamentos (SX9):** o motor resolve relações a partir de `SX9`
+> (`getRelations`), mas neste deploy de teste a `SX9`/`SIX` não estão
+> registradas no `SX2` — por isso campos como `SC5`/`NO1` respondem
+> `Unknown field` (degradação documentada no código, "ponytail"). Com um
+> dicionário completo, as relações listadas via SX9 são expostas como
+> sub-campos aninhados no tipo.
+
+## Testes
+
+Testes TIR (Python e2e) em `tests/tir/`. Execute com `pytest tests/tir/ -v`
+contra um AppServer Protheus com este RPO implantado.
+
+## Roteiro de sub-projetos
+
+Este é o sub-projetos 1-2 de 6: Core Engine + Mutations (este repositório)
+→ Auth → Field Hooks → SDK Generator → Console PO-UI. Veja as specs de
+design para o roteiro completo e como cada sub-projeto posterior se
+encaixa neste motor.

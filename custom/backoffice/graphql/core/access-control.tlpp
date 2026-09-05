@@ -4,11 +4,11 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlAccessControl - deny-list (structural) + permission hook (per-user,
-      wired to real auth in the Auth sub-project) access checks.
+@desc GqlAccessControl - lista de bloqueio (estrutural) + hook de permissão
+      (por usuário, conectado à autenticação real no sub-projeto Auth).
 /@*/
 class GqlAccessControl
     private data oConfig as object
@@ -21,7 +21,6 @@ endclass
 method new(oConfig as object) as object class GqlAccessControl
     ::oConfig := oConfig
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -40,7 +39,6 @@ method isTableAllowed(cTable as character) as logical class GqlAccessControl
         endif
     next nI
     return .T.
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -60,6 +58,4 @@ method isFieldAllowed(cTable as character, cField as character) as logical class
         endif
     next nI
     return .T.
-endmethod
 
-endnamespace

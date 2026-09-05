@@ -4,16 +4,17 @@
 namespace custom.backoffice.graphql
 
 /*/{Protheus.doc}
-@type Object
+@type Objeto
 @author GraphQL Engine Team
 @since 3.1.0
-@desc GqlMutationBuilder - turns a table name, the real branch field name,
-      a validated input object and a field-name list into ready-to-run SQL
-      text for INSERT/UPDATE (soft-delete uses UPDATE too). The branch
-      field is always forced to cFilAnt - never read from oInput - exactly
-      like GqlQueryBuilder does for reads. Every value goes through
-      GqlQueryBuilder():EscapeValue(cValToChar(...)) before reaching SQL
-      text - never raw concatenation of client-supplied values.
+@desc GqlMutationBuilder - transforma um nome de tabela, o nome real do
+      campo de filial, um objeto de entrada validado e uma lista de nomes
+      de campos em texto SQL pronto para execução de INSERT/UPDATE
+      (soft-delete também usa UPDATE). O campo de filial é sempre forçado
+      para cFilAnt — nunca lido do oInput — exatamente como o
+      GqlQueryBuilder faz para leituras. Todo valor passa por
+      GqlQueryBuilder():EscapeValue(cValToChar(...)) antes de chegar ao SQL
+      — nunca concatenação crua de valores fornecidos pelo cliente.
 /@*/
 class GqlMutationBuilder
     public method new() as object
@@ -26,7 +27,6 @@ endclass
 
 method new() as object class GqlMutationBuilder
     return self
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -118,9 +118,10 @@ method buildInsert(cTable as character, cFilialField as character, oInput as jso
         cVals += "'" + GqlQueryBuilder():EscapeValue(cFilAnt) + "'"
     endif
 
-    // R_E_C_N_O_ assignment - see the method's Protheus.doc header above for
-    // the full concurrency analysis (known TOCTOU race, investigated and
-    // rejected fixes, practical risk). Kept as MAX()+1 deliberately.
+    // Atribuição de R_E_C_N_O_ - veja o cabeçalho Protheus.doc do método
+    // acima para a análise de concorrência completa (corrida TOCTOU
+    // conhecida, correções investigadas e rejeitadas, risco prático).
+    // Mantido deliberadamente como MAX()+1.
     if !empty(cCols)
         cCols += ", "
         cVals += ", "
@@ -129,7 +130,6 @@ method buildInsert(cTable as character, cFilialField as character, oInput as jso
     cVals += "(SELECT COALESCE(MAX(R_E_C_N_O_), 0) + 1 FROM " + cSqlTable + ")"
 
     return "INSERT INTO " + cSqlTable + " (" + cCols + ") VALUES (" + cVals + ")"
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -162,7 +162,6 @@ method buildUpdate(cTable as character, cFilialField as character, oInput as jso
     endif
 
     return "UPDATE " + RetSqlName(cTable) + " SET " + cSet + " WHERE " + cWhere
-endmethod
 
 /*/{Protheus.doc}
 @type Method
@@ -185,11 +184,9 @@ method buildSoftDelete(cTable as character, cFilialField as character, oInput as
     endif
 
     return "UPDATE " + RetSqlName(cTable) + " SET D_E_L_E_T_ = '*' WHERE " + cWhere
-endmethod
 
 method escapedValue(uValue as variant) as character class GqlMutationBuilder
     return GqlQueryBuilder():EscapeValue(cValToChar(uValue))
-endmethod
 
 method keyWhere(oInput as json, aKeyFields as array) as character class GqlMutationBuilder
     local cResult := "" as character
@@ -203,6 +200,4 @@ method keyWhere(oInput as json, aKeyFields as array) as character class GqlMutat
     next nI
 
     return cResult
-endmethod
 
-endnamespace

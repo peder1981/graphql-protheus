@@ -1,5 +1,5 @@
 """
-TIR Test — GraphQL query pagination (limit/offset, maxPageSize cap)
+Teste TIR — paginação de consulta GraphQL (limit/offset, teto maxPageSize)
 """
 from contrib.tir import Webapp
 import json
