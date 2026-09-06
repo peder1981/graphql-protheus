@@ -257,7 +257,10 @@ Este motor faz parte de um roteiro maior em 6 sub-projetos:
 
 1. **Core Engine** (leitura) — concluído
 2. **Mutations** (escrita) — concluído, este manual
-3. **Auth** — autenticação/autorização real por usuário
+3. **Auth** — implementado (código + config `authEnforced`/`groupPermissions`);
+   ativação real (`[HTTPREST] Security=1`) depende de uma instância com
+   dicionário de empresa/usuário completo — ver
+   `docs/superpowers/specs/2026-09-06-graphql-auth-design.md`
 4. **Field Hooks** — pontos de extensão por campo
 5. **SDK Generator** — geração de contratos AdvPL a partir do schema
 6. **Console PO-UI** — interface administrativa

@@ -1,6 +1,8 @@
 # GraphQL Auth — Autenticação e Autorização por Usuário
 
-Status: aprovado para planejamento
+Status: implementado (código + config), validação empírica de Security=1
+end-to-end bloqueada neste ambiente de teste — ver "Achados empíricos" no
+final
 Data: 2026-09-06
 Sub-projeto: 3 de 6 (Core Engine → Mutations → **Auth** → Field Hooks → SDK Generator → Console PO-UI)
 
@@ -157,6 +159,66 @@ usuário-senha em `tests/contrib/tir.py`.
   mesma tabela funciona.
 - `test_graphql_auth_wildcard_group.tir` — grupo com `tables: ["*"]`
   acessa qualquer tabela não bloqueada estruturalmente.
+
+## Achados empíricos (planejamento/implementação, 2026-09-06)
+
+Confirmados ao vivo contra o container `protheus-graphql`/`protheus-compile`:
+
+1. **Security=1 trava neste ambiente de teste.** Ligar `[HTTPREST]
+   Security=1` faz o próprio pipeline nativo do Protheus
+   (`FWUserAccount`/`MPUSERFORMMODEL`) responder HTTP 500 antes de
+   `GQLSERVICE` rodar, para qualquer usuário — o dicionário de
+   empresa/usuário deste container é minimalista demais (sem SM0
+   completo) para o fluxo de autenticação nativo funcionar. Revertido
+   para `Security=0` (estado original restaurado, ambiente compartilhado
+   não ficou comprometido). Validar `Security=1` de ponta a ponta exige
+   uma instância Protheus com dicionário completo.
+2. **`RetCodUsr()` não é um sinal confiável de "existe request
+   autenticado".** Mesmo com `Security=0` (nenhuma autenticação HTTP),
+   `RetCodUsr()` devolveu um valor não-vazio consistentemente — é o
+   usuário padrão do ambiente/RPC, não o usuário da requisição HTTP.
+   Por isso o design mudou: em vez de inferir "sem autenticação" por
+   `getUserId()` vazio, a camada de autorização por grupo é gate por
+   config explícita (`authEnforced`, default `false`) — só quem já
+   confirmou em produção que `Security=1` popula `RetCodUsr()`
+   corretamente deve ligar essa flag.
+3. **`RetSqlName("SYS_USR_GROUPS")` resolve para o nome físico ERRADO**
+   (`SYS990`, usado para outra finalidade) em vez de `sys_usr_groups`.
+   Diferente do gotcha já conhecido do SIX/SX9 (que falha retornando
+   vazio, com fallback seguro), aqui a função devolve uma resposta
+   *ativamente incorreta* sem sinalizar erro — `GqlAuthContext` usa o
+   nome físico fixo `sys_usr_groups` (confirmado via psql direto),
+   nunca `RetSqlName()`, para esta tabela.
+4. **`custom/backoffice/graphql/config/graphql-config.json` é lido via
+   `MemoRead()` relativo a `RootPath` (`/protheus12/protheus_data`),
+   não a `SourcePath` (`/protheus12/apo`).** Descoberto ao vivo: o
+   container `protheus-graphql` só tem `custom.rpo` montado (sem árvore
+   de fontes) e ainda assim o `denyTables` funcionava — porque o build
+   anterior já tinha materializado uma cópia do JSON em três caminhos
+   sob `protheus_data` (extraída do RPO no primeiro boot). Uma
+   atualização de config feita só recompilando o `.json` no RPO **não
+   se propaga** para essas cópias já materializadas — é preciso
+   sobrescrevê-las diretamente (ou recriar o container do zero) para
+   uma mudança de config realmente valer. Testado e confirmado: depois
+   de sobrescrever as três cópias, a mudança valeu imediatamente, sem
+   reiniciar o servidor (leitura é por requisição).
+5. Com `authEnforced: true` e `groupPermissions` configurado para os
+   grupos reais de `sys_usr_groups` (`peder`/`000002` pertence a `*` e
+   `000000`, confirmado via psql), o acesso ainda foi negado nos testes
+   manuais — sinal de que o usuário efetivamente autenticado nesse
+   contexto de execução (`RetCodUsr()`) não é `000002` nem `000000`
+   nesta configuração de ambiente. Não foi possível identificar
+   empiricamente, neste container, qual usuário `RetCodUsr()` realmente
+   devolve dentro do método `@Get` — mais um motivo para `authEnforced`
+   ficar `false` por padrão e a validação completa ficar para uma
+   instância com dicionário/empresa completos (mesmo escopo do achado 1).
+
+**Conclusão prática:** o código do sub-projeto Auth está implementado,
+compilado sem erros/warnings novos, e não introduz regressão nenhuma na
+suíte de testes existente (20/21 - o 1 residual é o gap SX9/SIX já
+documentado, anterior a este sub-projeto). A ativação real
+(`authEnforced: true` + `Security=1`) permanece não validada de ponta a
+ponta, documentada como limitação de ambiente, não do código.
 
 ## Dependências para sub-projetos seguintes
 

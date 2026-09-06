@@ -91,3 +91,34 @@ probabilidade, não eliminado.
 Veja o cabeçalho Protheus.doc de `writeCreate()` em
 `custom/backoffice/graphql/core/workarea-writer.tlpp` para a análise
 técnica completa.
+
+## Auth (autenticação e autorização por usuário)
+
+`GqlAuthContext` (core/auth-context.tlpp) isola o único ponto incerto do
+sub-projeto Auth — qual função AdvPL devolve o usuário autenticado
+(`RetCodUsr()`) e seus grupos (`SYS_USR_GROUPS`, nome físico
+`sys_usr_groups` — `RetSqlName()` resolve errado para essa tabela,
+confirmado ao vivo). `GqlAccessControl` ganha `isUserAllowed(cTable,
+cOperation)`, uma terceira camada de verificação (grupo/usuário) somada à
+deny-list estrutural e à allow-list de mutation existentes.
+
+Diferente das outras camadas, esta é **opt-in via config**
+(`authEnforced`, padrão `false` em `graphql-config.json`), não
+auto-detectada: `RetCodUsr()` devolveu, ao vivo neste ambiente de teste,
+um valor não-vazio mesmo sem nenhuma autenticação HTTP (`Security=0`) —
+não é um sinal confiável de "existe usuário autenticado nesta
+requisição". Com `authEnforced: false` (padrão), `isUserAllowed()` sempre
+devolve `.T.` sem tocar o banco, idêntico ao comportamento anterior a
+este sub-projeto. Só quando o operador liga `authEnforced: true` (depois
+de confirmar, no seu próprio ambiente com `[HTTPREST] Security=1` e
+dicionário de empresa/usuário completo, que `RetCodUsr()` reflete
+corretamente o usuário da requisição) é que `groupPermissions` passa a
+valer, com `OR` entre os grupos do usuário — basta um grupo liberar a
+tabela para autorizar.
+
+Neste ambiente de teste específico (dicionário minimalista, sem SM0
+completo), `Security=1` faz o próprio pipeline nativo do Protheus
+travar com HTTP 500 antes do código deste projeto rodar — confirmado ao
+vivo, revertido para `Security=0`. A ativação de ponta a ponta
+(`Security=1` + `authEnforced: true`) permanece não validada aqui;
+detalhes completos em `docs/superpowers/specs/2026-09-06-graphql-auth-design.md`.

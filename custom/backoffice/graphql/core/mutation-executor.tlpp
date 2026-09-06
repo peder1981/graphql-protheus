@@ -19,8 +19,9 @@ class GqlMutationExecutor
     private data oInputValidator   as object
     private data oWorkareaWriter   as object
     private data oExecutor         as object
+    private data oAccessControl    as object
 
-    public method new(oMutationSchema as object, oDictionaryReader as object, oInputValidator as object, oWorkareaWriter as object, oExecutor as object) as object
+    public method new(oMutationSchema as object, oDictionaryReader as object, oInputValidator as object, oWorkareaWriter as object, oExecutor as object, oAccessControl as object) as object
     public method execute(cQuerySource as character) as json
 method resolveMutationField(oField as json) as json
     method splitFieldName(cName as character) as json
@@ -29,12 +30,13 @@ method resolveMutationField(oField as json) as json
     method fetchByKey(cTable as character, oField as json, oInput as json, aKeyFields as array, cFilialField as character) as array
 endclass
 
-method new(oMutationSchema as object, oDictionaryReader as object, oInputValidator as object, oWorkareaWriter as object, oExecutor as object) as object class GqlMutationExecutor
+method new(oMutationSchema as object, oDictionaryReader as object, oInputValidator as object, oWorkareaWriter as object, oExecutor as object, oAccessControl as object) as object class GqlMutationExecutor
     ::oMutationSchema   := oMutationSchema
     ::oDictionaryReader := oDictionaryReader
     ::oInputValidator   := oInputValidator
     ::oWorkareaWriter   := oWorkareaWriter
     ::oExecutor         := oExecutor
+    ::oAccessControl    := oAccessControl
     return self
 
 /*/{Protheus.doc}
@@ -114,6 +116,10 @@ method resolveMutationField(oField as json) as json class GqlMutationExecutor
     cTable := oParsed["table"]
 
     if !::oMutationSchema:isMutable(cTable)
+        return GqlErrors():single("Unknown or restricted mutation: " + oField["name"])
+    endif
+
+    if !::oAccessControl:isUserAllowed(cTable, "write")
         return GqlErrors():single("Unknown or restricted mutation: " + oField["name"])
     endif
 

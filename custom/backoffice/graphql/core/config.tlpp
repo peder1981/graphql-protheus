@@ -9,11 +9,16 @@ namespace custom.backoffice.graphql
 @since 3.0.0
 @desc GqlConfig - carrega custom/backoffice/graphql/config/graphql-config.json
       e expõe acessores tipados para listas de bloqueio e limites de paginação.
+      authEnforced (padrão false) e groupPermissions controlam a camada de
+      autorização por usuário/grupo (sub-projeto Auth) - ver
+      GqlAccessControl:isUserAllowed().
 /@*/
 class GqlConfig
     private data aDenyTables         as array
     private data aDenyFields         as array
     private data aAllowMutations     as array
+    private data oGroupPermissions   as json
+    private data lAuthEnforced       as logical
     private data nDefaultPageSize    as numeric
     private data nMaxPageSize        as numeric
     private data nSchemaCacheTtlSecs as numeric
@@ -22,6 +27,8 @@ class GqlConfig
     public method getDenyTables() as array
     public method getDenyFields() as array
     public method getAllowMutations() as array
+    public method getGroupPermissions() as json
+    public method isAuthEnforced() as logical
     public method getDefaultPageSize() as numeric
     public method getMaxPageSize() as numeric
     public method getSchemaCacheTtlSeconds() as numeric
@@ -39,6 +46,8 @@ method new() as object class GqlConfig
     ::aDenyTables         := {}
     ::aDenyFields         := {}
     ::aAllowMutations     := {}
+    ::oGroupPermissions   := JsonObject():New()
+    ::lAuthEnforced       := .F.
     ::nDefaultPageSize    := 20
     ::nMaxPageSize        := 200
     ::nSchemaCacheTtlSecs := 3600
@@ -65,6 +74,12 @@ method new() as object class GqlConfig
     if oJson["allowMutations"] != nil
         ::aAllowMutations := oJson["allowMutations"]
     endif
+    if oJson["groupPermissions"] != nil
+        ::oGroupPermissions := oJson["groupPermissions"]
+    endif
+    if oJson["authEnforced"] != nil
+        ::lAuthEnforced := oJson["authEnforced"]
+    endif
     if oJson["schemaCacheTtlSeconds"] != nil
         ::nSchemaCacheTtlSecs := oJson["schemaCacheTtlSeconds"]
     endif
@@ -89,6 +104,12 @@ method getDenyFields() as array class GqlConfig
 
 method getAllowMutations() as array class GqlConfig
     return ::aAllowMutations
+
+method getGroupPermissions() as json class GqlConfig
+    return ::oGroupPermissions
+
+method isAuthEnforced() as logical class GqlConfig
+    return ::lAuthEnforced
 
 method getDefaultPageSize() as numeric class GqlConfig
     return ::nDefaultPageSize

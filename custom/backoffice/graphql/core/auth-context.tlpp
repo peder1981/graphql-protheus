@@ -1,0 +1,93 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+#include "topconn.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Objeto
+@author GraphQL Engine Team
+@since 3.2.0
+@desc GqlAuthContext - isola o único ponto realmente incerto do
+      sub-projeto Auth: qual função AdvPL devolve o usuário autenticado
+      dentro de um método @Get/@Post do TLPP REST quando [HTTPREST]
+      Security=1 está ligado. Usa RetCodUsr() (função AdvPL clássica,
+      disponível desde versões muito antigas do Protheus) - **não
+      confirmado ao vivo neste plano**: o ambiente Docker de teste deste
+      sub-projeto tem dicionário de empresa/usuário incompleto (sem
+      SM0/dicionário de company completo) e o próprio pipeline nativo do
+      Protheus (FWUserAccount/MPUSERFORMMODEL) trava com erro 500 antes
+      de qualquer código deste projeto rodar quando Security=1 é ligado
+      neste container específico (confirmado ao vivo, revertido para
+      Security=0 após o teste). Validar RetCodUsr() de verdade exige uma
+      instância Protheus com dicionário de empresa/usuário completo.
+      Grupo(s) do usuário vêm de SYS_USR_GROUPS (dicionário real,
+      confirmado via psql direto neste ambiente: colunas usr_id/usr_grupo,
+      um usuário pode ter mais de um grupo - ex. "*" e um código específico
+      - por isso getUserGroups() devolve array, nunca um grupo único).
+/@*/
+class GqlAuthContext
+    public method new() as object
+    public method getUserId() as character
+    public method getUserGroups() as array
+endclass
+
+method new() as object class GqlAuthContext
+    return self
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@return Character - código do usuário autenticado (RetCodUsr()), ou ""
+        quando não há sessão autenticada (deployment com Security=0 - o
+        próprio [HTTPREST] do appserver.ini decide isso, não este método).
+        "" é o sinal que GqlAccessControl:isUserAllowed() usa para pular a
+        verificação por grupo inteira (ver comentário lá).
+/@*/
+method getUserId() as character class GqlAuthContext
+    return alltrim(RetCodUsr())
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@return Array - códigos de grupo (character) do usuário autenticado, via
+        SYS_USR_GROUPS. Array vazio se não há usuário autenticado ou o
+        usuário não pertence a nenhum grupo.
+/@*/
+method getUserGroups() as array class GqlAuthContext
+    local aResult   := {} as array
+    local cUserId   := ::getUserId() as character
+    local cGrpTable := "sys_usr_groups" as character
+    local cQuery    := "" as character
+    local oStmt     as object
+    local cAlq      as character
+
+    if empty(cUserId)
+        return aResult
+    endif
+
+    // ponytail: nome fisico direto (nao RetSqlName("SYS_USR_GROUPS")) -
+    // confirmado ao vivo que RetSqlName resolve essa tabela interna do
+    // framework para o nome ERRADO (SYS990, usada por outra finalidade),
+    // nao para sys_usr_groups. Mesma familia de gotcha do SIX/SX9 em
+    // dictionary-reader.tlpp, mas aqui RetSqlName nao falha vazio - falha
+    // dando uma resposta ativamente errada, entao nao ha fallback seguro
+    // baseado em "resultado vazio": usar sempre o nome fisico confirmado
+    // direto no Postgres.
+
+    cQuery := "SELECT usr_grupo AS UGRUPO FROM " + cGrpTable + ;
+               " WHERE d_e_l_e_t_ = ' ' AND usr_id = ?"
+    oStmt := FWExecStatement():New(ChangeQuery(cQuery))
+    oStmt:SetString(1, cUserId)
+    cAlq := oStmt:OpenAlias()
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        aAdd(aResult, alltrim((cAlq)->UGRUPO))
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+    oStmt:Destroy()
+
+    return aResult

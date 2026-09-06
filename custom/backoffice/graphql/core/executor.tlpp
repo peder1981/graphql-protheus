@@ -15,8 +15,9 @@ class GqlExecutor
     private data oSchemaProvider    as object
     private data oDictionaryReader  as object
     private data oQueryBuilder      as object
+    private data oAccessControl     as object
 
-    public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object
+    public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object, oAccessControl as object) as object
     public method execute(cQuerySource as character) as json
     public method resolveTableField(oField as json, cExtraWhere as character, aExtraParams as array) as array
     method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array
@@ -25,16 +26,22 @@ class GqlExecutor
     method fieldAlias(oField as json) as character
 endclass
 
-method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object class GqlExecutor
+method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object, oAccessControl as object) as object class GqlExecutor
     ::oSchemaProvider   := oSchemaProvider
     ::oDictionaryReader := oDictionaryReader
     ::oQueryBuilder     := oQueryBuilder
+    ::oAccessControl    := oAccessControl
     return self
 
 /*/{Protheus.doc}
 @type Method
 @author GraphQL Engine Team
 @since 3.0.0
+@desc Verifica GqlAccessControl:isUserAllowed() (autorizacao por
+      grupo, sub-projeto Auth) apenas para os campos de tabela raiz -
+      relacionamentos aninhados (resolveRelation) nao sao verificados
+      individualmente nesta fase, mesma lacuna documentada ja aceita
+      para validacao de input em mutations.
 @param cQuerySource Character - raw GraphQL query text
 @return JSON - {"data": {...}} on success, {"errors": [...]} on failure
 /@*/
@@ -65,6 +72,9 @@ method execute(cQuerySource as character) as json class GqlExecutor
     for nI := 1 to len(aDefs)
         aSel := aDefs[nI]["selectionSet"]
         for nJ := 1 to len(aSel)
+            if !::oAccessControl:isUserAllowed(aSel[nJ]["name"], "read")
+                return GqlErrors():single("Unknown or restricted field: " + aSel[nJ]["name"])
+            endif
             oData[::fieldAlias(aSel[nJ])] := ::resolveTableField(aSel[nJ], "", {})
         next nJ
     next nI

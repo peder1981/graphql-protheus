@@ -7,19 +7,26 @@ namespace custom.backoffice.graphql
 @type Objeto
 @author GraphQL Engine Team
 @since 3.0.0
-@desc GqlAccessControl - lista de bloqueio (estrutural) + hook de permissão
-      (por usuário, conectado à autenticação real no sub-projeto Auth).
+@desc GqlAccessControl - lista de bloqueio (estrutural) + permissão por
+      usuário/grupo (sub-projeto Auth, 3.2.0). As três camadas se
+      combinam - nenhuma isolada libera acesso: isTableAllowed/
+      isFieldAllowed (estrutural, sempre ativa) e isUserAllowed (por
+      grupo, ativa apenas quando há usuário autenticado - ver comentário
+      no método).
 /@*/
 class GqlAccessControl
-    private data oConfig as object
+    private data oConfig      as object
+    private data oAuthContext as object
 
-    public method new(oConfig as object) as object
+    public method new(oConfig as object, oAuthContext as object) as object
     public method isTableAllowed(cTable as character) as logical
     public method isFieldAllowed(cTable as character, cField as character) as logical
+    public method isUserAllowed(cTable as character, cOperation as character) as logical
 endclass
 
-method new(oConfig as object) as object class GqlAccessControl
-    ::oConfig := oConfig
+method new(oConfig as object, oAuthContext as object) as object class GqlAccessControl
+    ::oConfig      := oConfig
+    ::oAuthContext := oAuthContext
     return self
 
 /*/{Protheus.doc}
@@ -58,4 +65,66 @@ method isFieldAllowed(cTable as character, cField as character) as logical class
         endif
     next nI
     return .T.
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@param cTable Character - table alias
+@param cOperation Character - "read" ou "write"
+@return Logical - autorização por grupo, independente da lista de bloqueio
+        estrutural (isTableAllowed/isFieldAllowed continuam valendo do
+        mesmo jeito, chamadas separadamente pelo caller).
+        Controlada por config, nao por deteccao automatica: RetCodUsr()
+        confirmado ao vivo (ver risco tecnico no spec/plano) que devolve
+        o usuario padrao do AMBIENTE mesmo sem sessao HTTP autenticada -
+        nao e um sinal confiavel de "existe request autenticado". Por
+        isso authEnforced (config, default false) e quem decide: false ->
+        devolve .T. sempre, comportamento identico a antes do sub-projeto
+        Auth (nenhuma query e feita). true -> o operador ja confirmou, no
+        seu proprio ambiente com Security=1 e dicionario de usuario/empresa
+        completo, que RetCodUsr() reflete o usuario autenticado da
+        requisicao - so entao o padrao inverte: grupo ausente de groupPermissions,
+        ou presente sem a tabela liberada, ou (para "write") sem
+        "mutations": true -> nega. Um usuário pode estar em mais de um
+        grupo (GqlAuthContext:getUserGroups()) - basta UM grupo liberar
+        para autorizar (OR entre grupos, sem replicar a priorização de
+        grupo nativa do Protheus - USR_PRIORIZA - fora de escopo deste
+        sub-projeto).
+/@*/
+method isUserAllowed(cTable as character, cOperation as character) as logical class GqlAccessControl
+    local aGroups  as array
+    local oPerms   as json
+    local oGroup   as json
+    local aTables  as array
+    local nI       := 0 as numeric
+    local nJ       := 0 as numeric
+
+    if !::oConfig:isAuthEnforced()
+        return .T.
+    endif
+
+    aGroups := ::oAuthContext:getUserGroups()
+    oPerms  := ::oConfig:getGroupPermissions()
+
+    for nI := 1 to len(aGroups)
+        oGroup := oPerms[aGroups[nI]]
+        if oGroup == nil
+            loop
+        endif
+        if cOperation == "write" .and. oGroup["mutations"] != .T.
+            loop
+        endif
+        aTables := oGroup["tables"]
+        if aTables == nil
+            loop
+        endif
+        for nJ := 1 to len(aTables)
+            if GqlConfig():MatchWildcard(aTables[nJ], cTable)
+                return .T.
+            endif
+        next nJ
+    next nI
+
+    return .F.
 
