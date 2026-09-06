@@ -4,10 +4,10 @@
 
 /*/{Protheus.doc}
 GQLSERVICE
-Ponto de entrada REST GraphQL dinâmico sobre o dicionário de dados do Protheus.
+Ponto de entrada REST GraphQL dinï¿½mico sobre o dicionï¿½rio de dados do Protheus.
 GET /rest/graphql              -> nomes dos tipos do schema (lista de bloqueio aplicada)
 GET /rest/graphql?type=<TABLE> -> detalhe completo do tipo de uma tabela
-GET /rest/graphql?query=<...>  -> execução completa da consulta
+GET /rest/graphql?query=<...>  -> execuï¿½ï¿½o completa da consulta
 @type User Function
 @author GraphQL Engine Team
 @since 3.0.0
@@ -28,7 +28,7 @@ User Function GQLSERVICE() as logical
     local oPeekDoc    as json
     local oMutSchema  as object
     local oMutValidator as object
-    local oMutBuilder as object
+    local oMutWriter  as object
     local oMutExecutor as object
 
     jParams   := oRest:getQueryRequest()
@@ -49,9 +49,9 @@ User Function GQLSERVICE() as logical
         elseif len(oPeekDoc["definitions"]) > 0 .and. oPeekDoc["definitions"][1]["operation"] == "mutation"
             oMutSchema    := custom.backoffice.graphql.GqlMutationSchema():new(oSchema, oConfig)
             oMutValidator := custom.backoffice.graphql.GqlInputValidator():new(oDict)
-            oMutBuilder   := custom.backoffice.graphql.GqlMutationBuilder():new()
+            oMutWriter    := custom.backoffice.graphql.GqlWorkareaWriter():new(oDict)
             oExecutor     := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig))
-            oMutExecutor  := custom.backoffice.graphql.GqlMutationExecutor():new(oMutSchema, oDict, oMutValidator, oMutBuilder, oExecutor)
+            oMutExecutor  := custom.backoffice.graphql.GqlMutationExecutor():new(oMutSchema, oDict, oMutValidator, oMutWriter, oExecutor)
             oResult := oMutExecutor:execute(cQuery)
         else
             oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig))

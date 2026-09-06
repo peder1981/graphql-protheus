@@ -18,7 +18,7 @@ class GqlExecutor
 
     public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object) as object
     public method execute(cQuerySource as character) as json
-    public method resolveTableField(oField as json, cExtraWhere as character) as array
+    public method resolveTableField(oField as json, cExtraWhere as character, aExtraParams as array) as array
     method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array
     method isScalarField(oType as json, cName as character) as logical
     method fieldNames(aSelection as array) as array
@@ -65,7 +65,7 @@ method execute(cQuerySource as character) as json class GqlExecutor
     for nI := 1 to len(aDefs)
         aSel := aDefs[nI]["selectionSet"]
         for nJ := 1 to len(aSel)
-            oData[::fieldAlias(aSel[nJ])] := ::resolveTableField(aSel[nJ], "")
+            oData[::fieldAlias(aSel[nJ])] := ::resolveTableField(aSel[nJ], "", {})
         next nJ
     next nI
 
@@ -78,12 +78,15 @@ method execute(cQuerySource as character) as json class GqlExecutor
 @author GraphQL Engine Team
 @since 3.0.0
 @param oField JSON - Field AST node for a root or nested table field
-@param cExtraWhere Character - already-safe (escaped) parent-key WHERE
-       fragment for nested calls, or ""
+@param cExtraWhere Character - additional, already-parameterized WHERE
+       fragment for nested calls, or "" (may contain '?' placeholders whose
+       values are supplied via aExtraParams, in order)
+@param aExtraParams Array - bind params ({"t","v"} JSON objects) matching
+       the '?' placeholders in cExtraWhere, in order, or {}
 @return Array - list of row objects (JSON), each with requested scalars
         and resolved nested relation lists
 /@*/
-method resolveTableField(oField as json, cExtraWhere as character) as array class GqlExecutor
+method resolveTableField(oField as json, cExtraWhere as character, aExtraParams as array) as array class GqlExecutor
     local cTable       := oField["name"] as character
     local oType        := ::oSchemaProvider:getType(cTable) as json
     local aScalarSel   := {} as array
@@ -92,9 +95,12 @@ method resolveTableField(oField as json, cExtraWhere as character) as array clas
     local oSel         as json
     local cOrderKey    as character
     local cFilialField as character
+    local oBuilt       as json
     local cSql         as character
+    local aParams      as array
     local aRows        := {} as array
     local cAlq         as character
+    local oStmt        as object
     local oRow         as json
     local nJ           := 0 as numeric
 
@@ -109,10 +115,19 @@ method resolveTableField(oField as json, cExtraWhere as character) as array clas
 
     cOrderKey    := ::oDictionaryReader:getOrderKey(cTable)
     cFilialField := ::oDictionaryReader:getFilialField(cTable)
-    cSql         := ::oQueryBuilder:build(cTable, cFilialField, ::fieldNames(aScalarSel), oField["arguments"], cOrderKey, cExtraWhere)
+    oBuilt  := ::oQueryBuilder:build(cTable, cFilialField, ::fieldNames(aScalarSel), oField["arguments"], cOrderKey, cExtraWhere, aExtraParams)
+    cSql    := oBuilt["sql"]
+    aParams := oBuilt["params"]
 
-    cAlq := GetNextAlias()
-    TCQuery cSql New Alias &cAlq
+    oStmt := FWExecStatement():New(ChangeQuery(cSql))
+    for nI := 1 to len(aParams)
+        if aParams[nI]["t"] == "N"
+            oStmt:SetNumeric(nI, aParams[nI]["v"])
+        else
+            oStmt:SetString(nI, cValToChar(aParams[nI]["v"]))
+        endif
+    next nI
+    cAlq := oStmt:OpenAlias()
     (cAlq)->(dbGoTop())
     while !(cAlq)->(Eof())
         oRow := JsonObject():New()
@@ -126,6 +141,7 @@ method resolveTableField(oField as json, cExtraWhere as character) as array clas
         (cAlq)->(dbSkip())
     enddo
     (cAlq)->(dbCloseArea())
+    oStmt:Destroy()
 
     return aRows
 
@@ -136,6 +152,8 @@ method resolveRelation(oParentType as json, cParentTable as character, oRelField
     local cLocalField  as character
     local cForeignField as character
     local cLocalValue as character
+    local aRelParams  := {} as array
+    local oP         as json
 
     for nI := 1 to len(aRelations)
         if aRelations[nI]["relatedTable"] == oRelField["name"]
@@ -150,9 +168,14 @@ method resolveRelation(oParentType as json, cParentTable as character, oRelField
 
     cLocalField    := oRelMeta["localFields"]
     cForeignField  := oRelMeta["foreignFields"]
-    cLocalValue    := GqlQueryBuilder():EscapeValue(cValToChar(oParentRow[cLocalField]))
+    cLocalValue    := cValToChar(oParentRow[cLocalField])
 
-    return ::resolveTableField(oRelField, cForeignField + " = '" + cLocalValue + "'")
+    oP := JsonObject():New()
+    oP["t"] := "C"
+    oP["v"] := cLocalValue
+    aAdd(aRelParams, oP)
+
+    return ::resolveTableField(oRelField, cForeignField + " = ?", aRelParams)
 
 method isScalarField(oType as json, cName as character) as logical class GqlExecutor
     local aFields := oType["fields"] as array

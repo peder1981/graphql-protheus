@@ -36,13 +36,14 @@ method new(oAccessControl as object) as object class GqlDictionaryReader
 /@*/
 method listTables() as array class GqlDictionaryReader
     local aResult := {}     as array
-    local cAlq    := GetNextAlias() as character
     local cQuery  := "SELECT X2_CHAVE AS TALIAS, X2_NOME AS TNOME FROM " + RetSqlName("SX2") + ;
                       " WHERE D_E_L_E_T_ = ' ' ORDER BY X2_CHAVE" as character
+    local oStmt   := FWExecStatement():New(ChangeQuery(cQuery)) as object
+    local cAlq    as character
     local cAlias  := "" as character
     local oRow    as json
 
-    TCQuery cQuery New Alias &cAlq
+    cAlq := oStmt:OpenAlias()
     (cAlq)->(dbGoTop())
     while !(cAlq)->(Eof())
         cAlias := alltrim((cAlq)->TALIAS)
@@ -55,6 +56,7 @@ method listTables() as array class GqlDictionaryReader
         (cAlq)->(dbSkip())
     enddo
     (cAlq)->(dbCloseArea())
+    oStmt:Destroy()
 
     return aResult
 
@@ -67,10 +69,11 @@ method listTables() as array class GqlDictionaryReader
 /@*/
 method getTableFields(cTable as character) as array class GqlDictionaryReader
     local aResult  := {} as array
-    local cAlq     := GetNextAlias() as character
     local cQuery   := "SELECT X3_CAMPO AS FCAMPO, X3_TIPO AS FTIPO, X3_DECIMAL AS FDECIMAL, X3_VISUAL AS FVISUAL, X3_TAMANHO AS FTAM, X3_OBRIGAT AS FOBRIG" + ;
                        " FROM " + RetSqlName("SX3") + ;
-                       " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = '" + cTable + "' ORDER BY X3_ORDEM" as character
+                       " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = ? ORDER BY X3_ORDEM" as character
+    local oStmt    as object
+    local cAlq     as character
     local cField   := "" as character
     local oRow     as json
 
@@ -78,7 +81,9 @@ method getTableFields(cTable as character) as array class GqlDictionaryReader
         return aResult
     endif
 
-    TCQuery cQuery New Alias &cAlq
+    oStmt := FWExecStatement():New(ChangeQuery(cQuery))
+    oStmt:SetString(1, cTable)
+    cAlq := oStmt:OpenAlias()
     (cAlq)->(dbGoTop())
     while !(cAlq)->(Eof())
         cField := alltrim((cAlq)->FCAMPO)
@@ -94,6 +99,7 @@ method getTableFields(cTable as character) as array class GqlDictionaryReader
         (cAlq)->(dbSkip())
     enddo
     (cAlq)->(dbCloseArea())
+    oStmt:Destroy()
 
     return aResult
 
@@ -131,9 +137,10 @@ method mapScalarType(cSx3Type as character, nDecimal as numeric) as character cl
 /@*/
 method getRelations(cTable as character) as array class GqlDictionaryReader
     local aResult := {} as array
-    local cAlq    := GetNextAlias() as character
     local cSx9Table := RetSqlName("SX9") as character
     local cQuery  := "" as character
+    local oStmt   as object
+    local cAlq    as character
     local cRelated := "" as character
     local oRow     as json
     local cCardinality := "" as character
@@ -148,9 +155,11 @@ method getRelations(cTable as character) as array class GqlDictionaryReader
 
     cQuery := "SELECT X9_CDOM AS RTABLE, X9_EXPDOM AS RLOCAL, X9_EXPCDOM AS RFOREIGN, X9_LIGCDOM AS RCARD" + ;
                " FROM " + cSx9Table + ;
-               " WHERE D_E_L_E_T_ = ' ' AND X9_DOM = '" + cTable + "'"
+               " WHERE D_E_L_E_T_ = ' ' AND X9_DOM = ?"
 
-    TCQuery cQuery New Alias &cAlq
+    oStmt := FWExecStatement():New(ChangeQuery(cQuery))
+    oStmt:SetString(1, cTable)
+    cAlq := oStmt:OpenAlias()
     (cAlq)->(dbGoTop())
     while !(cAlq)->(Eof())
         cRelated := alltrim((cAlq)->RTABLE)
@@ -169,6 +178,7 @@ method getRelations(cTable as character) as array class GqlDictionaryReader
         (cAlq)->(dbSkip())
     enddo
     (cAlq)->(dbCloseArea())
+    oStmt:Destroy()
 
     return aResult
 
@@ -183,22 +193,26 @@ method getRelations(cTable as character) as array class GqlDictionaryReader
         scalar field of the table if SIX is unreachable by any means.
 /@*/
 method getOrderKey(cTable as character) as character class GqlDictionaryReader
-    local cAlq      := GetNextAlias() as character
     local cSixTable := RetSqlName("SIX") as character
     local cSx3Table := "" as character
     local cQuery    := "" as character
+    local oStmt     as object
+    local cAlq      as character
     local cKey      := "" as character
     local aFields   as array
 
     if !empty(cSixTable)
         cQuery := "SELECT X6_CHAVE AS RKEY FROM " + cSixTable + ;
-                   " WHERE D_E_L_E_T_ = ' ' AND X6_ARQUIVO = '" + cTable + "' AND X6_ORDEM = '1'"
-        TCQuery cQuery New Alias &cAlq
+                   " WHERE D_E_L_E_T_ = ' ' AND X6_ARQUIVO = ? AND X6_ORDEM = '1'"
+        oStmt := FWExecStatement():New(ChangeQuery(cQuery))
+        oStmt:SetString(1, cTable)
+        cAlq := oStmt:OpenAlias()
         (cAlq)->(dbGoTop())
         if !(cAlq)->(Eof())
             cKey := alltrim((cAlq)->RKEY)
         endif
         (cAlq)->(dbCloseArea())
+        oStmt:Destroy()
     endif
 
     if empty(cKey)
@@ -218,13 +232,16 @@ method getOrderKey(cTable as character) as character class GqlDictionaryReader
         cSx3Table := RetSqlName("SX3")
         if len(cSx3Table) > 3
             cQuery := "SELECT chave AS RKEY FROM SIX" + substr(cSx3Table, 4) + ;
-                       " WHERE d_e_l_e_t_ = ' ' AND indice = '" + cTable + "' AND ordem = '1'"
-            TCQuery cQuery New Alias &cAlq
+                       " WHERE d_e_l_e_t_ = ' ' AND indice = ? AND ordem = '1'"
+            oStmt := FWExecStatement():New(ChangeQuery(cQuery))
+            oStmt:SetString(1, cTable)
+            cAlq := oStmt:OpenAlias()
             (cAlq)->(dbGoTop())
             if !(cAlq)->(Eof())
                 cKey := alltrim((cAlq)->RKEY)
             endif
             (cAlq)->(dbCloseArea())
+            oStmt:Destroy()
         endif
     endif
 
@@ -250,13 +267,15 @@ method getOrderKey(cTable as character) as character class GqlDictionaryReader
         be found even if X3_VISUAL = "N" or it matches a denyFields pattern.
 /@*/
 method getFilialField(cTable as character) as character class GqlDictionaryReader
-    local cAlq    := GetNextAlias() as character
     local cQuery  := "SELECT X3_CAMPO AS FCAMPO FROM " + RetSqlName("SX3") + ;
-                      " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = '" + cTable + "'" as character
+                      " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = ?" as character
+    local oStmt   := FWExecStatement():New(ChangeQuery(cQuery)) as object
+    local cAlq    as character
     local cField  := "" as character
     local cResult := "" as character
 
-    TCQuery cQuery New Alias &cAlq
+    oStmt:SetString(1, cTable)
+    cAlq := oStmt:OpenAlias()
     (cAlq)->(dbGoTop())
     while !(cAlq)->(Eof())
         cField := alltrim((cAlq)->FCAMPO)
@@ -266,6 +285,7 @@ method getFilialField(cTable as character) as character class GqlDictionaryReade
         (cAlq)->(dbSkip())
     enddo
     (cAlq)->(dbCloseArea())
+    oStmt:Destroy()
 
     return cResult
 

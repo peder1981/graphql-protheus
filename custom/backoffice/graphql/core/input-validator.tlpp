@@ -8,7 +8,7 @@ namespace custom.backoffice.graphql
 @author GraphQL Engine Team
 @since 3.1.0
 @desc GqlInputValidator - valida o objeto de entrada de uma mutation contra
-      metadados do SX3 (obrigatório/tipo/tamanho) antes de qualquer escrita.
+      metadados do SX3 (obrigatï¿½rio/tipo/tamanho) antes de qualquer escrita.
 /@*/
 class GqlInputValidator
     private data oDictionaryReader as object
@@ -33,8 +33,7 @@ method new(oDictionaryReader as object) as object class GqlInputValidator
         GqlDictionaryReader:getTableFields() is checked: required fields
         must be present, and any present field's type/length is validated.
         The table's own filial field is skipped entirely - it is never read
-        from oInput by GqlMutationBuilder:buildInsert() (always forced from
-        cFilAnt), so enforcing required-ness on it here would be spurious
+        from oInput by GqlWorkareaWriter (always forced from cFilAnt), so enforcing required-ness on it here would be spurious
         and inconsistent with the actual write behavior.
 /@*/
 method validateCreate(cTable as character, oInput as json) as array class GqlInputValidator
