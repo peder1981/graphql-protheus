@@ -26,11 +26,19 @@ outro método no `GqlAccessControl`.
 
 `GqlMutationExecutor` (core/mutation-executor.tlpp) é um pipeline de
 escrita paralelo ao executor de leitura, compartilhando o mesmo
-lexer/parser e o mesmo `GqlDictionaryReader`/`GqlQueryBuilder`. Ele
-escreve via `TCSqlExec()` — **não** via `TCQuery`, que quebra de forma
-não-capturável com qualquer coisa que não seja `SELECT` neste ambiente
-(confirmado empiricamente; veja as Restrições Globais do plano para a
-investigação completa) — e reseleciona a linha afetada através do
+lexer/parser e o mesmo `GqlDictionaryReader`. Ele escreve pelo caminho
+nativo de workarea do Protheus (`GqlWorkareaWriter`,
+core/workarea-writer.tlpp) — `RecLock(cTable,.T.)` para inclusão,
+`DbSetOrder(1)`+`dbSeek` para posicionar pela chave primária e
+`RecLock(cTable,.F.)` para alteração/soft-delete, sempre fechando com
+`MsUnlock()` — e não mais via SQL bruto. Isso substitui uma abordagem
+anterior (SQL direto via `TCSqlExec()`, já removida) porque
+`RecLock(cTable,.T.)` delega a atribuição do `R_E_C_N_O_` (chave física
+do registro) à própria camada ISAM/DBAccess, eliminando a corrida
+TOCTOU que o `MAX(R_E_C_N_O_)+1` em SQL bruto tinha, e porque o caminho
+de workarea é portável identicamente para outros bancos (SQL Server,
+Oracle) suportados pelo Protheus, ao contrário de SQL bruto amarrado à
+sintaxe do PostgreSQL. A linha afetada é reselecionada através do
 `GqlExecutor:resolveTableField()` existente, de modo que a moldagem da
 resposta (aliases, seleções aninhadas) nunca é duplicada.
 
@@ -38,8 +46,25 @@ Uma tabela é gravável apenas se estiver em `allowMutations` (configuração)
 E ainda passar pela lista de bloqueio do caminho de leitura — as duas
 condições se combinam, nenhuma sozinha é suficiente. `GqlInputValidator`
 verifica obrigatoriedade/tipo/tamanho contra os metadados do SX3 antes de
-qualquer SQL rodar. Exclusão é sempre lógica (`D_E_L_E_T_ = '*'`),
-coerente com como toda consulta já filtra leituras.
+qualquer escrita. Exclusão é sempre lógica (`DbDelete()`, marcando
+`D_E_L_E_T_ = '*'`), coerente com como toda consulta já filtra leituras.
+
+Um `create` faz antes uma verificação de existência (reaproveitando o
+mesmo `locate()` que `update`/`delete` já usam) antes de tentar
+`RecLock(cTable,.T.)`. Isso é necessário porque uma violação de chave
+única neste backend Postgres surge **assincronamente** — via um flush
+de I/O separado do DBAccess, relatado pelo `ErrorBlock` global do
+framework num contexto de execução diferente — e não como um erro de
+runtime síncrono em `MsUnlock()`; um `begin sequence/recover using`
+em torno de `MsUnlock()` foi testado ao vivo e **não** captura esse
+caso (`writeCreate()` retornava `.T.` na hora, e o cliente recebia de
+volta os dados antigos da linha já existente, parecendo um `create`
+bem-sucedido). A verificação prévia fecha o caso comum (cliente
+recriando uma chave já ativa) de forma determinística; uma corrida
+genuína — dois `create`s para a mesma chave nova chegando no mesmo
+instante — ainda pode escapar dessa verificação, um risco residual de
+baixa probabilidade, documentado no cabeçalho Protheus.doc de
+`writeCreate()` em `workarea-writer.tlpp`.
 
 Campos de entrada desconhecidos ou bloqueados são atualmente ignorados
 silenciosamente, não rejeitados com erro explícito: `GqlValidator` nunca é
@@ -51,27 +76,18 @@ campo desconhecido em um objeto de entrada deveria ser um erro de
 validação). Fechar isso fica para a validação de argumentos de mutation
 por campo de um sub-projeto futuro.
 
-### Limitação conhecida: Concorrência e atribuição de `R_E_C_N_O_`
+### Limitação conhecida: corrida em `create` sobre a mesma chave nova
 
-Mutations `create` atribuem `R_E_C_N_O_` (a chave primária física da
-tabela neste caminho de escrita com SQL cru, já que a atribuição
-automática normal do ISAM/DBAccess é contornada) via uma subconsulta SQL
-`MAX(R_E_C_N_O_)+1`. Isso **não é seguro sob escrita concorrente** — duas
-chamadas `create` simultâneas contra a mesma tabela podem entrar em
-corrida e tentar inserir o mesmo valor de `R_E_C_N_O_`, causando colisão
-de chave primária.
+A verificação prévia de existência em `writeCreate()` fecha o caso comum
+de duplicidade (chave já ativa), mas uma corrida genuína — dois `create`s
+para a **mesma chave nova**, ambos chegando antes de qualquer um
+confirmar a escrita — ainda pode escapar, pelo motivo assíncrono
+explicado acima. **Garantia de segurança atual**: seguro para uso de
+requisição única e baixa concorrência (ex.: os próprios testes deste
+sub-projeto). Sob tráfego de produção genuinamente concorrente na mesma
+tabela, esse caso extremo permanece um risco residual de baixa
+probabilidade, não eliminado.
 
-Tanto uma sequência/IDENTITY real do Postgres quanto uma abordagem de
-advisory lock na mesma instrução foram investigadas e consideradas
-indisponíveis/ineficazes neste ambiente. Fechar essa lacuna exige uma
-migração de banco (adicionar sequências/IDENTITY reais às tabelas de
-dicionário do Protheus) ou uma stored procedure no servidor — ambos fora
-do escopo deste sub-projeto.
-
-**Garantia de segurança atual**: seguro para uso de requisição única e
-baixa concorrência (ex.: os próprios testes deste sub-projeto). **Não
-seguro** para tráfego de produção concorrente na mesma tabela.
-
-Veja o cabeçalho Protheus.doc de `buildInsert()` em
-`custom/backoffice/graphql/core/mutation-builder.tlpp` para a análise
+Veja o cabeçalho Protheus.doc de `writeCreate()` em
+`custom/backoffice/graphql/core/workarea-writer.tlpp` para a análise
 técnica completa.

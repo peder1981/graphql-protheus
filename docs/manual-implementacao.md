@@ -23,7 +23,7 @@ custom/backoffice/graphql/
     errors.tlpp                         -- monta o envelope {"errors": [...]}
     mutation-schema.tlpp                 -- expõe create/update/deleteTABLE só para tabelas liberadas
     input-validator.tlpp                  -- valida input de mutation contra SX3
-    mutation-builder.tlpp                  -- monta SQL de INSERT/UPDATE/soft-delete
+    workarea-writer.tlpp                   -- escreve via RecLock/FieldPut/MsUnlock (workarea nativa)
     mutation-executor.tlpp                  -- orquestra escrita: valida, escreve, reseleciona
   entrypoints/
     service.entrypoint.tlpp                  -- ponto de entrada REST único (@Get /graphql)
@@ -39,9 +39,10 @@ SIX), com cache em memória por processo do AppServer.
   (`[HTTPREST]` no `appserver.ini`, escutando na porta configurada —
   `9995` nos exemplos deste manual).
 - Backend de banco de dados: o motor foi desenvolvido e testado contra
-  **PostgreSQL**. A escrita usa SQL bruto via `TCSqlExec()` — não foi
-  validada contra outros bancos suportados pelo Protheus (SQL Server,
-  Oracle, DB2).
+  **PostgreSQL**. A escrita usa o caminho nativo de workarea
+  (`RecLock`/`FieldPut`/`MsUnlock`), projetado para ser portável
+  identicamente a outros bancos suportados pelo Protheus (SQL Server,
+  Oracle, DB2) — mas só validado ao vivo contra PostgreSQL até aqui.
 - Ferramental de compilação de fontes `.tlpp` para o seu ambiente
   (`appsrvlinux -compile` ou equivalente).
 
@@ -67,7 +68,7 @@ errors.tlpp
 introspection.tlpp
 mutation-schema.tlpp
 input-validator.tlpp
-mutation-builder.tlpp
+workarea-writer.tlpp
 mutation-executor.tlpp
 entrypoints/service.entrypoint.tlpp
 ```
@@ -159,28 +160,28 @@ ausente de `denyTables` — as duas condições precisam valer juntas.
 
 ## Limitações conhecidas (leia antes de liberar tabelas em produção)
 
-### Concorrência na criação de registros (`R_E_C_N_O_`)
+### Corrida em `create` sobre a mesma chave nova
 
-Mutations de `create` escrevem via SQL bruto, o que faz o caminho normal
-de atribuição automática de `R_E_C_N_O_` (a chave física de registro do
-Protheus) pelo ISAM/DBAccess ser contornado. O motor calcula esse valor
-via uma subconsulta `MAX(R_E_C_N_O_) + 1`.
+Mutations de `create` escrevem via `RecLock(cTable,.T.)` (caminho nativo
+de workarea) — isso delega a atribuição do `R_E_C_N_O_` (chave física de
+registro) à própria camada ISAM/DBAccess, eliminando a corrida que uma
+abordagem anterior via SQL bruto (`MAX(R_E_C_N_O_)+1`, já removida)
+tinha. Antes de tentar o `RecLock`, o motor também faz uma verificação
+prévia de existência da chave de negócio (reaproveitando o `locate()`
+que `update`/`delete` já usam), rejeitando de forma limpa o caso comum
+de um `create` repetido para uma chave já ativa.
 
-**Isso não é seguro sob escrita concorrente**: duas chamadas `create`
-simultâneas contra a mesma tabela podem calcular o mesmo próximo valor
-antes de qualquer uma delas confirmar a transação, causando colisão de
-chave primária. Foram investigadas e descartadas duas alternativas (uma
-sequência real do PostgreSQL — não existe para as tabelas do dicionário
-Protheus neste tipo de ambiente — e um lock consultivo do PostgreSQL
-dentro da mesma instrução — testado e confirmado ineficaz sob o nível de
-isolamento `READ COMMITTED`). Resolver isso de verdade exige uma
-migração de banco (sequência/`IDENTITY` real nas tabelas do dicionário)
-ou uma stored procedure no servidor — ambos fora do escopo atual.
-
-**Garantia de segurança atual**: seguro para uso de requisição única ou
-baixa concorrência. **Não seguro** para tráfego de produção concorrente
-contra a mesma tabela. Veja o cabeçalho Protheus.doc de `buildInsert()`
-em `mutation-builder.tlpp` para a análise técnica completa.
+**Risco residual, não eliminado**: uma violação de chave única neste
+backend Postgres surge de forma assíncrona (um flush de I/O separado do
+DBAccess, fora do fluxo de execução da requisição original) — por isso
+uma corrida **genuína**, com dois `create`s para a **mesma chave nova**
+chegando praticamente ao mesmo instante, ainda pode escapar da
+verificação prévia. **Garantia de segurança atual**: seguro para uso de
+requisição única ou baixa concorrência (ex.: os próprios testes deste
+sub-projeto). Sob tráfego de produção genuinamente concorrente na mesma
+tabela, esse caso extremo permanece um risco de baixa probabilidade.
+Veja o cabeçalho Protheus.doc de `writeCreate()` em
+`workarea-writer.tlpp` para a análise técnica completa.
 
 ### Casamento de linha em update/delete depende do índice SIX
 
@@ -238,12 +239,17 @@ chave antes de chamar a mutation.
 
 ## Testes
 
-Testes end-to-end em Python (framework TIR) ficam em `tests/tir/`.
+Testes end-to-end em Python (convenção TIR) ficam em `tests/tir/`.
 Execute com `pytest tests/tir/ -v` contra um AppServer Protheus real com
-este RPO implantado. Não há suíte de testes unitários AdvPL/TLPP neste
-projeto — a verificação em desenvolvimento foi feita via `curl` ao vivo
-contra um servidor real, e os testes TIR documentam o comportamento
-esperado para verificação contínua.
+este RPO implantado — `tests/conftest.py` (coletor pytest para arquivos
+`.tir`) e `tests/contrib/tir.py` (um `Webapp` REST leve, via `urllib`,
+com a mesma superfície do `tir.Webapp` original) tornam a suíte
+executável localmente sem depender do framework TIR completo
+(Selenium/browser). A URL base do endpoint é configurável via a
+variável de ambiente `PROTHEUS_REST_BASE` (padrão:
+`http://localhost:9996/rest`). Não há suíte de testes unitários
+AdvPL/TLPP neste projeto — toda verificação é via HTTP, ao vivo, contra
+um servidor real.
 
 ## Roteiro de sub-projetos
 

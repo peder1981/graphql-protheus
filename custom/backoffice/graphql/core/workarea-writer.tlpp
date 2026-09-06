@@ -9,28 +9,28 @@ namespace custom.backoffice.graphql
 @since 3.2.0
 @desc GqlWorkareaWriter - substitui o GqlMutationBuilder (SQL bruto) como
       mecanismo de escrita das mutations GraphQL. Escreve pelo caminho
-      nativo de workarea do Protheus, o mesmo dos programas padro:
-      RecLock(cTable,.T.) para incluso, DbSetOrder(1)+dbSeek para
-      posicionar pela chave primria e RecLock(cTable,.F.) para alterao
+      nativo de workarea do Protheus, o mesmo dos programas padrão:
+      RecLock(cTable,.T.) para inclusão, DbSetOrder(1)+dbSeek para
+      posicionar pela chave primária e RecLock(cTable,.F.) para alteração
       e soft-delete, sempre fechando com MsUnlock().
 
-      Rationale (validado com o TOTVS no plano desta verso):
+      Rationale (validado com o TOTVS no plano desta versão):
        1. O caminho SQL anterior (FWExecStatement+TCSqlExec) travava o
-          appserver na incluso e devolvia "Write failed" no update/delete
-          (IO de workarea  portvel identicamente para Oracle; SQL direto
-          com R_E_C_N_O_=MAX()+1 no sobreviveria ao Oracle).
-       2. RecLock(cTable,.T.) delega o R_E_C_N_O_  camada ISAM/DBAccess,
+          appserver na inclusão e devolvia "Write failed" no update/delete
+          (I/O de workarea é portável identicamente para Oracle; SQL direto
+          com R_E_C_N_O_=MAX()+1 não sobreviveria ao Oracle).
+       2. RecLock(cTable,.T.) delega o R_E_C_N_O_ à camada ISAM/DBAccess,
           eliminando a corrida TOCTOU documentada no buildInsert antigo.
        3. FieldPut() exige registro travado e valor com o MESMO tipo do
-          campo fsico (L->boolean, D->date, N->numeric, C/M->string) -
-          divergncia aborta o aplicativo. Por isso TODO valor  convertido
-          antes do FieldPut, e a filial  sempre forada de
-          cFilAnt (nunca oInput). D_E_L_E_T_  controlada explicitamente
-          (' ' na incluso, '*' no soft-delete).
-       Os metadados de campo (tipo/tamanho/decimal) vm do SX3 via
-       fieldMeta() - FieldType()/FieldSize()/FieldDec() no existem no
+          campo físico (L->boolean, D->date, N->numeric, C/M->string) -
+          divergência aborta o aplicativo. Por isso todo valor é convertido
+          antes do FieldPut, e a filial é sempre forçada de
+          cFilAnt (nunca oInput). D_E_L_E_T_ é controlada explicitamente
+          (' ' na inclusão, '*' no soft-delete).
+       Os metadados de campo (tipo/tamanho/decimal) vêm do SX3 via
+       fieldMeta() - FieldType()/FieldSize()/FieldDec() não existem no
        AppMap deste build (erro "cannot find function X in AppMap").
-      A filial key field, ao buscar pela chave, tambm  sempre cFilAnt.
+      A filial key field, ao buscar pela chave, também é sempre cFilAnt.
 /@*/
 class GqlWorkareaWriter
     private data oDictionaryReader as object
