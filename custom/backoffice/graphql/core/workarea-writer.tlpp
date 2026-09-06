@@ -1,0 +1,364 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Objeto
+@author GraphQL Engine Team
+@since 3.2.0
+@desc GqlWorkareaWriter - substitui o GqlMutationBuilder (SQL bruto) como
+      mecanismo de escrita das mutations GraphQL. Escreve pelo caminho
+      nativo de workarea do Protheus, o mesmo dos programas padro:
+      RecLock(cTable,.T.) para incluso, DbSetOrder(1)+dbSeek para
+      posicionar pela chave primria e RecLock(cTable,.F.) para alterao
+      e soft-delete, sempre fechando com MsUnlock().
+
+      Rationale (validado com o TOTVS no plano desta verso):
+       1. O caminho SQL anterior (FWExecStatement+TCSqlExec) travava o
+          appserver na incluso e devolvia "Write failed" no update/delete
+          (IO de workarea  portvel identicamente para Oracle; SQL direto
+          com R_E_C_N_O_=MAX()+1 no sobreviveria ao Oracle).
+       2. RecLock(cTable,.T.) delega o R_E_C_N_O_  camada ISAM/DBAccess,
+          eliminando a corrida TOCTOU documentada no buildInsert antigo.
+       3. FieldPut() exige registro travado e valor com o MESMO tipo do
+          campo fsico (L->boolean, D->date, N->numeric, C/M->string) -
+          divergncia aborta o aplicativo. Por isso TODO valor  convertido
+          antes do FieldPut, e a filial  sempre forada de
+          cFilAnt (nunca oInput). D_E_L_E_T_  controlada explicitamente
+          (' ' na incluso, '*' no soft-delete).
+       Os metadados de campo (tipo/tamanho/decimal) vm do SX3 via
+       fieldMeta() - FieldType()/FieldSize()/FieldDec() no existem no
+       AppMap deste build (erro "cannot find function X in AppMap").
+      A filial key field, ao buscar pela chave, tambm  sempre cFilAnt.
+/@*/
+class GqlWorkareaWriter
+    private data oDictionaryReader as object
+
+    public method new(oDictionaryReader as object) as object
+    public method writeCreate(cTable as character, cFilialField as character, oInput as json, aFieldNames as array) as logical
+    public method writeUpdate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, aSetFields as array) as logical
+    public method writeSoftDelete(cTable as character, cFilialField as character, oInput as json, aKeyFields as array) as logical
+    method fieldMeta(cTable as character) as json
+    method castValue(cType as character, xValue as variant) as variant
+    method castKeyValue(cType as character, xValue as variant, nLen as numeric, nDec as numeric) as character
+    method locate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, oMeta as json) as logical
+endclass
+
+method new(oDictionaryReader as object) as object class GqlWorkareaWriter
+    ::oDictionaryReader := oDictionaryReader
+    return self
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@param cTable Character - table alias, e.g. "SA1"
+@return JSON - map field name -> {type, size, dec} read from SX3 for ALL
+        fields of the table (not just visible/allowed ones - the filial
+        field and key fields are usually X3_VISUAL="N" or deny-listed).
+@desc Single source of truth for the writes' casts and seek-key padding.
+      Replaces FieldType()/FieldSize()/FieldDec() (not in this build's
+      AppMap) with the SX3 physical metadata.
+/@*/
+method fieldMeta(cTable as character) as json class GqlWorkareaWriter
+    local cQuery := "SELECT X3_CAMPO AS FCAMPO, X3_TIPO AS FTIPO, X3_TAMANHO AS FTAM, X3_DECIMAL AS FDEC" + ;
+                     " FROM " + RetSqlName("SX3") + ;
+                     " WHERE D_E_L_E_T_ = ' ' AND X3_ARQUIVO = ?" as character
+    local oStmt  := FWExecStatement():New(ChangeQuery(cQuery)) as object
+    local cAlq   as character
+    local cField := "" as character
+    local oMeta  := JsonObject():New() as json
+    local oF     as json
+
+    oStmt:SetString(1, cTable)
+    cAlq := oStmt:OpenAlias()
+    (cAlq)->(dbGoTop())
+    while !(cAlq)->(Eof())
+        cField := alltrim((cAlq)->FCAMPO)
+        oF := JsonObject():New()
+        oF["type"] := alltrim((cAlq)->FTIPO)
+        oF["size"] := (cAlq)->FTAM
+        oF["dec"]  := (cAlq)->FDEC
+        oMeta[cField] := oF
+        (cAlq)->(dbSkip())
+    enddo
+    (cAlq)->(dbCloseArea())
+    oStmt:Destroy()
+
+    return oMeta
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@param cTable Character - table alias, e.g. "SA1"
+@param cFilialField Character - real branch field name, or ""
+@param oInput JSON - validated create input (flat field map)
+@param aFieldNames Array - field names to write, from oInput's keys
+@return Logical - .T. on successful include
+@desc Opens cTable on a workarea, RecLock(cTable,.T.) to create a new
+      record, FieldPut per provided field (cast to the physical DB type).
+      The filial field is always forced to cFilAnt (never from oInput) and
+      D_E_L_E_T_ is set to ' ' (space) so read-path filters (D_E_L_E_T_=' ')
+      find the new row. Closes with MsUnlock(). R_E_C_N_O_ is assigned
+      atomically by the ISAM/DBAccess layer - never written here.
+/@*/
+method writeCreate(cTable as character, cFilialField as character, oInput as json, aFieldNames as array) as logical class GqlWorkareaWriter
+    local aArea := GetArea() as array
+    local lOk   := .F. as logical
+    local nI    := 0 as numeric
+    local cName := "" as character
+    local nPos  := 0 as numeric
+    local cType := "" as character
+    local oMeta := ::fieldMeta(cTable) as json
+    local oF    as json
+
+    DbSelectArea(cTable)
+    lOk := RecLock(cTable, .T.)
+    if lOk
+        for nI := 1 to len(aFieldNames)
+            cName := aFieldNames[nI]
+            oF := oMeta[cName]
+            nPos := FieldPos(cName)
+            if oF != nil .and. nPos > 0
+                cType := oF["type"]
+                FieldPut(nPos, ::castValue(cType, oInput[cName]))
+            endif
+        next nI
+
+        if !empty(cFilialField)
+            nPos := FieldPos(cFilialField)
+            if nPos > 0
+                FieldPut(nPos, cFilAnt)
+            endif
+        endif
+
+        nPos := FieldPos("D_E_L_E_T_")
+        if nPos > 0
+            FieldPut(nPos, " ")
+        endif
+
+        MsUnlock()
+        lOk := .T.
+    endif
+    RestArea(aArea)
+    return lOk
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@param cTable Character - table alias
+@param cFilialField Character - real branch field name, or ""
+@param oInput JSON - validated update input (key fields + fields to change)
+@param aKeyFields Array - field names identifying the row (seek order 1)
+@param aSetFields Array - field names to change (FieldPut) - never includes
+       key fields nor the filial field
+@return Logical - .T. on successful update
+@desc Positions on the row via DbSetOrder(1)+dbSeek over the physical key
+      built from aKeyFields (the SX3 metadata in oMeta), skips soft-deleted
+      rows (D_E_L_E_T_ <> ' '), then RecLock(cTable,.F.) and FieldPut per
+      SET field (cast by SX3 type). The filial key component, like in every
+      write, is forced from cFilAnt. Closes with MsUnlock().
+/@*/
+method writeUpdate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, aSetFields as array) as logical class GqlWorkareaWriter
+    local aArea := GetArea() as array
+    local lOk   := .F. as logical
+    local nI    := 0 as numeric
+    local cName := "" as character
+    local nPos  := 0 as numeric
+    local cType := "" as character
+    local oMeta := ::fieldMeta(cTable) as json
+    local oF    as json
+
+    DbSelectArea(cTable)
+    lOk := ::locate(cTable, cFilialField, oInput, aKeyFields, oMeta)
+    if lOk
+        lOk := RecLock(cTable, .F.)
+        if lOk
+            for nI := 1 to len(aSetFields)
+                cName := aSetFields[nI]
+                oF := oMeta[cName]
+                nPos := FieldPos(cName)
+                if oF != nil .and. nPos > 0
+                    cType := oF["type"]
+                    FieldPut(nPos, ::castValue(cType, oInput[cName]))
+                endif
+            next nI
+            MsUnlock()
+            lOk := .T.
+        endif
+    endif
+    RestArea(aArea)
+    return lOk
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@param cTable Character - table alias
+@param cFilialField Character - real branch field name, or ""
+@param oInput JSON - delete input (key fields only)
+@param aKeyFields Array - field names identifying the row (seek order 1)
+@return Logical - .T. on successful soft delete
+@desc Same locate logic as writeUpdate, then RecLock(cTable,.F.) and
+      FieldPut D_E_L_E_T_ = '*' (soft delete). Never touches an already
+      deleted row (locate rejects D_E_L_E_T_ <> ' '). Closes with
+      MsUnlock().
+/@*/
+method writeSoftDelete(cTable as character, cFilialField as character, oInput as json, aKeyFields as array) as logical class GqlWorkareaWriter
+    local aArea := GetArea() as array
+    local lOk   := .F. as logical
+
+    DbSelectArea(cTable)
+    lOk := ::locate(cTable, cFilialField, oInput, aKeyFields, ::fieldMeta(cTable))
+    if lOk
+        lOk := RecLock(cTable, .F.)
+        if lOk
+            DbDelete()
+            MsUnlock()
+            lOk := .T.
+        endif
+    endif
+    RestArea(aArea)
+    return lOk
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@param cType Character - physical field type (SX3 X3_TIPO): C/N/D/L/M
+@param xValue Variant - parsed GraphQL value (C/N/L as valtype)
+@return Variant - value recast to the physical type FieldPut expects,
+        else FieldPut aborts the app (e.g. "Expected character expression
+        on fieldput").
+@desc C/M -> cValToChar; N -> numeric (comma/point tolerant); L -> logical
+      (T/S/Y/1 true); D -> date from AAAMMDD string (also DD/MM/YYYY or
+      DD/MM/YY normalized).
+/@*/
+method castValue(cType as character, xValue as variant) as variant class GqlWorkareaWriter
+    local cV := "" as character
+    local dV := Ctod("") as date
+
+    if cType == "N"
+        if valtype(xValue) == "N"
+            return xValue
+        endif
+        cV := alltrim(cValToChar(xValue))
+        if empty(cV)
+            return 0
+        endif
+        cV := strtran(cV, ".", "")
+        cV := strtran(cV, ",", ".")
+        return val(cV)
+    elseif cType == "D"
+        if valtype(xValue) == "D"
+            return xValue
+        endif
+        cV := alltrim(cValToChar(xValue))
+        if empty(cV)
+            return Ctod("")
+        endif
+        if at("/", cV) == 0 .and. at("-", cV) == 0 .and. len(cV) == 8
+            return StoD(cV)
+        endif
+        dV := CToD(cV)
+        if empty(dV)
+            cV := strtran(strtran(cV, "-", ""), "/", "")
+            if len(cV) == 8
+                return StoD(cV)
+            endif
+            if len(cV) == 6
+                return StoD(substr(cV, 5, 2) + substr(cV, 3, 2) + substr(cV, 1, 2))
+            endif
+        endif
+        return dV
+    elseif cType == "L"
+        if valtype(xValue) == "L"
+            return xValue
+        endif
+        cV := upper(alltrim(cValToChar(xValue)))
+        return cV == "T" .or. cV == "S" .or. cV == "Y" .or. cV == "1"
+    endif
+
+    return cValToChar(xValue)
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@param cType Character - physical type of the key component (SX3)
+@param xValue Variant - key component value
+@param nLen Numeric - physical field length (SX3 X3_TAMANHO)
+@param nDec Numeric - decimal positions (numeric fields)
+@return Character - the seek-key byte segment for this component: C/M
+        right-padded to nLen (DBAccess physical key), N right-justified via
+        Str(), D as DTOS()
+/@*/
+method castKeyValue(cType as character, xValue as variant, nLen as numeric, nDec as numeric) as character class GqlWorkareaWriter
+    local cV := "" as character
+    local nV := 0 as numeric
+    local dV := Ctod("") as date
+
+    if cType == "N"
+        nV := val(cValToChar(xValue))
+        return Str(nV, nLen, nDec)
+    elseif cType == "D"
+        dV := ::castValue("D", xValue)
+        return DTOS(dV)
+    endif
+
+    return PadR(cValToChar(xValue), nLen)
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.2.0
+@param cTable Character - table alias (must already be current area)
+@param cFilialField Character - real branch field name, or ""
+@param oInput JSON - flat field map with the key values
+@param aKeyFields Array - SIX order-1 key fields, in order
+@param oMeta JSON - field metadata map from fieldMeta()
+@return Logical - .T. when positioned on a live (D_E_L_E_T_=' ') record
+@desc Builds the physical seek key from aKeyFields components (filial key
+      component always from cFilAnt, padded/typed via castKeyValue), does
+      DbSetOrder(1) + dbSeek, and rejects soft-deleted rows.
+/@*/
+method locate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, oMeta as json) as logical class GqlWorkareaWriter
+    local cSeekKey := "" as character
+    local nI       := 0 as numeric
+    local cFType   := "" as character
+    local nFLen    := 0 as numeric
+    local nFDec    := 0 as numeric
+    local xVal     as variant
+    local nDelPos  := 0 as numeric
+    local oF       as json
+
+    DbSetOrder(1)
+    for nI := 1 to len(aKeyFields)
+        oF := oMeta[aKeyFields[nI]]
+        if oF == nil
+            return .F.
+        endif
+        cFType := oF["type"]
+        nFLen  := oF["size"]
+        nFDec  := oF["dec"]
+        if !empty(cFilialField) .and. aKeyFields[nI] == cFilialField
+            xVal := cFilAnt
+        else
+            xVal := oInput[aKeyFields[nI]]
+        endif
+        cSeekKey += ::castKeyValue(cFType, xVal, nFLen, nFDec)
+    next nI
+
+    if !dbSeek(cSeekKey)
+        return .F.
+    endif
+
+    nDelPos := FieldPos("D_E_L_E_T_")
+    if nDelPos > 0 .and. FieldGet(nDelPos) != " "
+        return .F.
+    endif
+
+    return .T.

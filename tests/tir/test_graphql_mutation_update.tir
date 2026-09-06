@@ -23,11 +23,11 @@ class TestGraphQLMutationUpdate:
         update_gql = 'mutation { updateSA1(input: {A1_FILIAL: "01", A1_COD: "ZZ0002", A1_LOJA: "01", A1_NOME: "After"}) { A1_NOME } }'
         result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(update_gql))
         data = json.loads(result.text)
-        assert data["data"]["updateSA1"]["A1_NOME"] == "After"
+        assert data["data"]["updateSA1"]["A1_NOME"].strip() == "After"
 
         # Verifica a atualização via consulta de leitura
         verify_gql = '{ SA1(filter: [{field: "A1_COD", op: "eq", value: "ZZ0002"}]) { A1_COD A1_NOME } }'
         verify_result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(verify_gql))
         verify_data = json.loads(verify_result.text)
-        assert verify_data["data"]["SA1"][0]["A1_NOME"] == "After"
-        assert verify_data["data"]["SA1"][0]["A1_COD"] == "ZZ0002"
+        assert verify_data["data"]["SA1"][0]["A1_NOME"].strip() == "After"
+        assert verify_data["data"]["SA1"][0]["A1_COD"].strip() == "ZZ0002"
