@@ -111,11 +111,12 @@ contra um AppServer Protheus com este RPO implantado.
 
 ## Roteiro de sub-projetos
 
-Este é os sub-projetos 1-3 de 6: Core Engine + Mutations + Auth (este
-repositório) → Field Hooks → SDK Generator → Console PO-UI. Auth
+Este é os sub-projetos 1-4 de 6: Core Engine + Mutations + Auth + Field
+Hooks (este repositório) → SDK Generator → Console PO-UI. Auth
 (autenticação nativa `[HTTPREST] Security=1` + autorização por
-grupo/`groupPermissions`, opt-in via `authEnforced` na config) está
-implementado, mas a ativação real depende de uma instância Protheus com
-dicionário de empresa/usuário completo — ver "Achados empíricos" na spec
-de Auth. Veja as specs de design para o roteiro completo e como cada
-sub-projeto posterior se encaixa neste motor.
+grupo/`groupPermissions`, opt-in via `authEnforced` na config) e Field
+Hooks (extensão por campo via `fieldHooks`, `onRead`/`onWrite`) estão
+implementados; a ativação/validação end-to-end de ambos depende de
+limitações deste ambiente de teste específico — ver "Achados empíricos"
+nas specs de Auth e Field Hooks. Veja as specs de design para o roteiro
+completo e como cada sub-projeto posterior se encaixa neste motor.

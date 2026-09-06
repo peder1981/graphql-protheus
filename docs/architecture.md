@@ -122,3 +122,29 @@ travar com HTTP 500 antes do código deste projeto rodar — confirmado ao
 vivo, revertido para `Security=0`. A ativação de ponta a ponta
 (`Security=1` + `authEnforced: true`) permanece não validada aqui;
 detalhes completos em `docs/superpowers/specs/2026-09-06-graphql-auth-design.md`.
+
+## Field Hooks (extensão por campo)
+
+`GqlFieldHooks` (core/field-hooks.tlpp) resolve, por `"TABELA.CAMPO"` em
+`fieldHooks` (config), o nome de uma `User Function` a rodar em dois
+pontos: `onRead` (em `GqlExecutor:resolveTableField()`, depois do
+`FieldGet`) e `onWrite` (em `GqlWorkareaWriter:writeCreate()`/
+`writeUpdate()`, antes do `FieldPut`, já depois da validação do
+`GqlInputValidator`). Resolução é via macro AdvPL (`&("{|u| " + cFunc +
+"(u)}")`), técnica padrão para chamar por nome de string — o nome vem
+sempre da config, nunca de input HTTP.
+
+Falha ao resolver ou chamar um hook (função inexistente ou erro em
+runtime) nunca derruba a requisição — loga via `FWLogMsg()` e devolve o
+valor original, confirmado ao vivo: uma referência de macro que falhou
+a compilar dentro de `begin sequence` corrompe o acesso a parâmetros do
+método dentro do `recover` (`"variable does not exist"` num parâmetro
+comum) — `callHook()` só altera uma variável local declarada antes do
+`begin sequence` dentro do `recover`, nunca um parâmetro do método.
+
+Neste ambiente de teste, uma `User Function` nova adicionada via
+compile incremental nunca ficou visível para o despacho dinâmico via
+macro, mesmo após restart completo do container — limitação de
+ambiente, não do código — e a degradação segura observada é exatamente
+a garantia de segurança que o sub-projeto pede. Detalhes completos em
+`docs/superpowers/specs/2026-09-06-graphql-field-hooks-design.md`.

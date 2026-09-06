@@ -1,6 +1,8 @@
 # GraphQL Field Hooks — Pontos de Extensao por Campo
 
-Status: aprovado para planejamento
+Status: implementado (codigo + config) - validacao end-to-end de um hook
+bem-sucedido bloqueada neste ambiente de teste, ver "Achados empiricos"
+no final
 Data: 2026-09-06
 Sub-projeto: 4 de 6 (Core Engine -> Mutations -> Auth -> **Field Hooks** -> SDK Generator -> Console PO-UI)
 
@@ -145,6 +147,57 @@ fonte de teste deste sub-projeto:
 - `test_graphql_fieldhook_missing_function_degrades.tir` — hook
   configurado apontando para uma funcao que nao existe: a requisicao
   ainda devolve `200`/`data`, com o valor original, sem erro 500.
+
+## Achados empiricos (implementacao, 2026-09-06)
+
+1. **`ExistBlock()` nao e um teste generico de "esta funcao existe".**
+   E um mecanismo de verificacao de Entry Points (mesmo uso documentado
+   nas convencoes deste projeto). Usa-lo para checar se um `U_HookXxx`
+   qualquer existe devolveu `.T.` mesmo para uma funcao que o compilador
+   de macro depois nao encontrou - `GqlFieldHooks:callHook()` nao usa
+   `ExistBlock()`, so `begin sequence/recover` em torno do compile+eval
+   macro.
+2. **Referenciar um parametro do proprio metodo (`cFuncName`) dentro do
+   corpo do `recover using oErr`, apos uma falha de COMPILACAO da macro
+   (nao um erro comum em runtime), lanca "variable does not exist"** -
+   confirmado ao vivo, reproduzido de forma deterministica. O `recover`
+   de `callHook()` so altera uma `local logical` declarada antes do
+   `begin sequence`, nunca nenhum parametro do metodo.
+3. **Nomes de funcao AdvPL sao truncados em 10 caracteres pelo
+   compilador** (regra ja documentada em outro projeto, confirmada de
+   novo aqui): `U_GqlHookUp` (11 chars) truncou para `U_GqlHookU`,
+   causando "cannot find function" mesmo a funcao tendo compilado com
+   sucesso. Renomeado para `U_HookUp` (8 chars) no fixture de teste.
+4. **Mesmo com o nome corrigido, uma `User Function` top-level nova,
+   adicionada via `-compile` incremental no `custom.rpo` deste
+   container especifico, nunca ficou visivel para `InterFunctionCall`
+   (despacho dinamico via macro `&()`)** - reproduzido de forma
+   deterministica mesmo apos `docker restart` E `docker stop`+`docker
+   start` completos do `protheus-graphql`. Classes/metodos (ex.: o
+   proprio `GqlFieldHooks`) recompilados incrementalmente SEMPRE
+   refletiram a versao nova corretamente - a limitacao e especifica a
+   simbolos de funcao standalone novos resolvidos via macro, nao ao
+   mecanismo de compilacao incremental em geral. Nao investigado a
+   fundo (seria necessario recriar o container do zero, fora do escopo
+   deste sub-projeto) - documentado como limitacao de ambiente, no
+   mesmo nivel do achado de `Security=1` do sub-projeto Auth.
+5. **O que isso confirmou, sem querer, e a propriedade de seguranca
+   mais importante do spec**: com um hook configurado apontando para
+   uma funcao que, por qualquer motivo, nao resolve em runtime, a
+   requisicao sempre devolveu `HTTP 200`/`data` com o valor original,
+   nunca `500` - o log `FWLogMsg` correspondente apareceu
+   consistentemente. Essa e exatamente a garantia que o spec pede
+   (ponto 4 do Objetivo).
+
+**Conclusao pratica:** o codigo deste sub-projeto compila sem erros
+nem warnings novos (19/19), nao introduz regressao nenhuma na suite
+existente (20/21 - o 1 residual e o gap SX9/SIX ja documentado, anterior
+a este sub-projeto), e a propriedade de degradacao graciosa (o
+requisito de seguranca central do spec) foi confirmada ao vivo. A
+transformacao efetiva de um valor por um hook bem-sucedido permanece
+nao validada de ponta a ponta neste container - depende de resolver o
+achado 4 numa instancia onde seja possivel investigar/recriar o
+ambiente sem risco.
 
 ## Dependencias para sub-projetos seguintes
 

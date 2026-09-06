@@ -1,11 +1,29 @@
 {
-  "denyTables": ["SRH*", "SRA", "SR5"],
-  "denyFields": ["*SENHA*", "*_PASSWORD*"],
-  "allowMutations": ["SA1"],
+  "denyTables": [
+    "SRH*",
+    "SRA",
+    "SR5"
+  ],
+  "denyFields": [
+    "*SENHA*",
+    "*_PASSWORD*"
+  ],
+  "allowMutations": [
+    "SA1"
+  ],
   "authEnforced": false,
   "groupPermissions": {
-    "000000": { "tables": ["*"], "mutations": true }
+    "000000": {
+      "tables": [
+        "*"
+      ],
+      "mutations": true
+    }
   },
-  "pagination": { "defaultPageSize": 20, "maxPageSize": 200 },
+  "fieldHooks": {},
+  "pagination": {
+    "defaultPageSize": 20,
+    "maxPageSize": 200
+  },
   "schemaCacheTtlSeconds": 3600
 }

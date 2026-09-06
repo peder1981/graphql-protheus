@@ -10,14 +10,17 @@ namespace custom.backoffice.graphql
 @since 3.0.0
 @desc GqlExecutor - parseia, valida e executa uma consulta GraphQL,
       resolvendo campos de tabela raiz e relacionamentos aninhados via SX9.
+      Cada campo escalar passa por GqlFieldHooks:applyRead() (sub-projeto
+      Field Hooks) antes de compor a linha de resposta.
 /@*/
 class GqlExecutor
     private data oSchemaProvider    as object
     private data oDictionaryReader  as object
     private data oQueryBuilder      as object
     private data oAccessControl     as object
+    private data oFieldHooks        as object
 
-    public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object, oAccessControl as object) as object
+    public method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object, oAccessControl as object, oFieldHooks as object) as object
     public method execute(cQuerySource as character) as json
     public method resolveTableField(oField as json, cExtraWhere as character, aExtraParams as array) as array
     method resolveRelation(oParentType as json, cParentTable as character, oRelField as json, oParentRow as json) as array
@@ -26,11 +29,12 @@ class GqlExecutor
     method fieldAlias(oField as json) as character
 endclass
 
-method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object, oAccessControl as object) as object class GqlExecutor
+method new(oSchemaProvider as object, oDictionaryReader as object, oQueryBuilder as object, oAccessControl as object, oFieldHooks as object) as object class GqlExecutor
     ::oSchemaProvider   := oSchemaProvider
     ::oDictionaryReader := oDictionaryReader
     ::oQueryBuilder     := oQueryBuilder
     ::oAccessControl    := oAccessControl
+    ::oFieldHooks       := oFieldHooks
     return self
 
 /*/{Protheus.doc}
@@ -142,7 +146,7 @@ method resolveTableField(oField as json, cExtraWhere as character, aExtraParams 
     while !(cAlq)->(Eof())
         oRow := JsonObject():New()
         for nI := 1 to len(aScalarSel)
-            oRow[::fieldAlias(aScalarSel[nI])] := (cAlq)->(FieldGet(FieldPos(aScalarSel[nI]["name"])))
+            oRow[::fieldAlias(aScalarSel[nI])] := ::oFieldHooks:applyRead(cTable, aScalarSel[nI]["name"], (cAlq)->(FieldGet(FieldPos(aScalarSel[nI]["name"]))))
         next nI
         for nJ := 1 to len(aRelationSel)
             oRow[::fieldAlias(aRelationSel[nJ])] := ::resolveRelation(oType, cTable, aRelationSel[nJ], oRow)

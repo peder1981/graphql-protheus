@@ -18,6 +18,7 @@ User Function GQLSERVICE() as logical
     local oConfig    := custom.backoffice.graphql.GqlConfig():new()             as object
     local oAuthCtx   := custom.backoffice.graphql.GqlAuthContext():new()        as object
     local oAccess    := custom.backoffice.graphql.GqlAccessControl():new(oConfig, oAuthCtx) as object
+    local oFieldHooks := custom.backoffice.graphql.GqlFieldHooks():new(oConfig)      as object
     local oDict      := custom.backoffice.graphql.GqlDictionaryReader():new(oAccess) as object
     local oSchema    := custom.backoffice.graphql.GqlSchemaProvider():new(oDict, oConfig) as object
     local jParams    as json
@@ -50,12 +51,12 @@ User Function GQLSERVICE() as logical
         elseif len(oPeekDoc["definitions"]) > 0 .and. oPeekDoc["definitions"][1]["operation"] == "mutation"
             oMutSchema    := custom.backoffice.graphql.GqlMutationSchema():new(oSchema, oConfig)
             oMutValidator := custom.backoffice.graphql.GqlInputValidator():new(oDict)
-            oMutWriter    := custom.backoffice.graphql.GqlWorkareaWriter():new(oDict)
-            oExecutor     := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig), oAccess)
+            oMutWriter    := custom.backoffice.graphql.GqlWorkareaWriter():new(oDict, oFieldHooks)
+            oExecutor     := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig), oAccess, oFieldHooks)
             oMutExecutor  := custom.backoffice.graphql.GqlMutationExecutor():new(oMutSchema, oDict, oMutValidator, oMutWriter, oExecutor, oAccess)
             oResult := oMutExecutor:execute(cQuery)
         else
-            oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig), oAccess)
+            oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig), oAccess, oFieldHooks)
             oResult := oExecutor:execute(cQuery)
         endif
     elseif !empty(cTypeName)

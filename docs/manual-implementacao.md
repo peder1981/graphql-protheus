@@ -261,7 +261,10 @@ Este motor faz parte de um roteiro maior em 6 sub-projetos:
    ativação real (`[HTTPREST] Security=1`) depende de uma instância com
    dicionário de empresa/usuário completo — ver
    `docs/superpowers/specs/2026-09-06-graphql-auth-design.md`
-4. **Field Hooks** — pontos de extensão por campo
+4. **Field Hooks** — implementado (código + config `fieldHooks`);
+   validação end-to-end de um hook bem-sucedido depende de resolver uma
+   limitação de ambiente com despacho dinâmico de função nova — ver
+   `docs/superpowers/specs/2026-09-06-graphql-field-hooks-design.md`
 5. **SDK Generator** — geração de contratos AdvPL a partir do schema
 6. **Console PO-UI** — interface administrativa
 

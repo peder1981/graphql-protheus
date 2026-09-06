@@ -31,11 +31,14 @@ namespace custom.backoffice.graphql
        fieldMeta() - FieldType()/FieldSize()/FieldDec() não existem no
        AppMap deste build (erro "cannot find function X in AppMap").
       A filial key field, ao buscar pela chave, também é sempre cFilAnt.
+      Cada valor passa por GqlFieldHooks:applyWrite() (sub-projeto Field
+      Hooks) antes do FieldPut, depois de validado pelo GqlInputValidator.
 /@*/
 class GqlWorkareaWriter
     private data oDictionaryReader as object
+    private data oFieldHooks       as object
 
-    public method new(oDictionaryReader as object) as object
+    public method new(oDictionaryReader as object, oFieldHooks as object) as object
     public method writeCreate(cTable as character, cFilialField as character, oInput as json, aFieldNames as array, aKeyFields as array) as logical
     public method writeUpdate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, aSetFields as array) as logical
     public method writeSoftDelete(cTable as character, cFilialField as character, oInput as json, aKeyFields as array) as logical
@@ -45,8 +48,9 @@ class GqlWorkareaWriter
     method locate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, oMeta as json) as logical
 endclass
 
-method new(oDictionaryReader as object) as object class GqlWorkareaWriter
+method new(oDictionaryReader as object, oFieldHooks as object) as object class GqlWorkareaWriter
     ::oDictionaryReader := oDictionaryReader
+    ::oFieldHooks       := oFieldHooks
     return self
 
 /*/{Protheus.doc}
@@ -152,7 +156,7 @@ method writeCreate(cTable as character, cFilialField as character, oInput as jso
                 nPos := FieldPos(cName)
                 if oF != nil .and. nPos > 0
                     cType := oF["type"]
-                    FieldPut(nPos, ::castValue(cType, oInput[cName]))
+                    FieldPut(nPos, ::castValue(cType, ::oFieldHooks:applyWrite(cTable, cName, oInput[cName])))
                 endif
             next nI
 
@@ -221,7 +225,7 @@ method writeUpdate(cTable as character, cFilialField as character, oInput as jso
                     nPos := FieldPos(cName)
                     if oF != nil .and. nPos > 0
                         cType := oF["type"]
-                        FieldPut(nPos, ::castValue(cType, oInput[cName]))
+                        FieldPut(nPos, ::castValue(cType, ::oFieldHooks:applyWrite(cTable, cName, oInput[cName])))
                     endif
                 next nI
                 MsUnlock()

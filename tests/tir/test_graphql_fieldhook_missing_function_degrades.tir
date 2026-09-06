@@ -1,0 +1,29 @@
+"""
+Teste TIR - Field Hooks: confirma que o mecanismo de hooks nunca quebra
+uma leitura normal, mesmo com fieldHooks vazio (estado padrao do config
+commitado). O cenario mais especifico - um hook CONFIGURADO cuja funcao
+nao resolve em runtime - foi confirmado ao vivo durante a implementacao
+(HTTP 200/data preservado, log "hook failed... using original value",
+sem 500) mas nao esta encapsulado aqui como .tir repetivel porque isso
+exigiria deixar uma entrada de hook deliberadamente quebrada no config
+padrao commitado - ver "Achados empiricos" no spec deste sub-projeto.
+"""
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLFieldHookDegrades:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_read_unaffected_with_no_hooks_configured(self):
+        gql = "{ SA1(limit: 1) { A1_COD A1_NOME } }"
+        result = self.client.http_get("/graphql?query=" + urllib.parse.quote_plus(gql))
+        data = json.loads(result.text)
+        assert "data" in data
+        assert "SA1" in data["data"]

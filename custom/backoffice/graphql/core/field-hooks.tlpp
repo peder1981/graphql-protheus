@@ -1,0 +1,131 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Objeto
+@author GraphQL Engine Team
+@since 3.3.0
+@desc GqlFieldHooks - resolve e chama, por nome de "User Function"
+      configurado em fieldHooks (graphql-config.json), uma transformacao
+      de valor por campo em dois pontos: leitura (applyRead, chamado por
+      GqlExecutor ao montar cada linha) e escrita (applyWrite, chamado
+      por GqlWorkareaWriter antes de cada FieldPut). Nome da funcao vem
+      sempre da config, nunca de input HTTP - sem risco de injecao via
+      requisicao. Falha ao resolver/chamar um hook nunca propaga - loga
+      via FWLogMsg() e devolve o valor original, tanto em leitura quanto
+      em escrita (ver justificativa completa no spec deste sub-projeto).
+/@*/
+class GqlFieldHooks
+    private data oConfig as object
+
+    public method new(oConfig as object) as object
+    public method applyRead(cTable as character, cField as character, uValue as variant) as variant
+    public method applyWrite(cTable as character, cField as character, uValue as variant) as variant
+    method resolveHook(cTable as character, cField as character, cDirection as character) as character
+    method callHook(cFuncName as character, uValue as variant) as variant
+endclass
+
+method new(oConfig as object) as object class GqlFieldHooks
+    ::oConfig := oConfig
+    return self
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.3.0
+@param cTable Character - table alias, e.g. "SA1"
+@param cField Character - field name, e.g. "A1_NOME"
+@param uValue Variant - value just read from the database (FieldGet)
+@return Variant - uValue transformed by the configured onRead hook, or
+        uValue unchanged if none is configured or the hook fails
+/@*/
+method applyRead(cTable as character, cField as character, uValue as variant) as variant class GqlFieldHooks
+    local cFunc := ::resolveHook(cTable, cField, "onRead") as character
+
+    if empty(cFunc)
+        return uValue
+    endif
+    return ::callHook(cFunc, uValue)
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.3.0
+@param cTable Character - table alias, e.g. "SA1"
+@param cField Character - field name, e.g. "A1_NOME"
+@param uValue Variant - value already validated by GqlInputValidator,
+       about to be written via FieldPut
+@return Variant - uValue transformed by the configured onWrite hook, or
+        uValue unchanged if none is configured or the hook fails
+/@*/
+method applyWrite(cTable as character, cField as character, uValue as variant) as variant class GqlFieldHooks
+    local cFunc := ::resolveHook(cTable, cField, "onWrite") as character
+
+    if empty(cFunc)
+        return uValue
+    endif
+    return ::callHook(cFunc, uValue)
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.3.0
+@param cTable Character - table alias
+@param cField Character - field name
+@param cDirection Character - "onRead" or "onWrite"
+@return Character - configured "User Function" name for
+        fieldHooks["TABLE.FIELD"][cDirection], or "" if not configured
+/@*/
+method resolveHook(cTable as character, cField as character, cDirection as character) as character class GqlFieldHooks
+    local oHooks := ::oConfig:getFieldHooks() as json
+    local cKey    := upper(cTable) + "." + upper(cField) as character
+    local oEntry  as json
+
+    oEntry := oHooks[cKey]
+    if oEntry == nil .or. oEntry[cDirection] == nil
+        return ""
+    endif
+    return oEntry[cDirection]
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.3.0
+@param cFuncName Character - "User Function" name, e.g. "U_GqlHookUpper"
+@param uValue Variant - value to pass to the hook
+@return Variant - the hook's return value, or uValue unchanged if the
+        function does not exist or raises a runtime error. Resolution is
+        via a macro-compiled codeblock ({|u| U_FUNC(u)} - the standard
+        AdvPL technique for calling a function by name). Confirmed live:
+        ExistBlock() is an Entry Point existence check (per this
+        project's own conventions), NOT a generic "does this function
+        exist" test - it returned true for an ordinary function that the
+        macro compiler then failed to find, so it is not used here.
+        Confirmed live, separately: referencing a plain method parameter
+        (like the function name) inside the "recover using" body, after
+        a macro-compile failure inside "begin sequence", raises its own
+        "variable does not exist" error - the failed compile appears to
+        unwind more of the local scope than an ordinary runtime error
+        would. The recover block below only ever sets a plain logical
+        local declared before the sequence, never anything else.
+/@*/
+method callHook(cFuncName as character, uValue as variant) as variant class GqlFieldHooks
+    local uResult := uValue as variant
+    local bHook   as codeblock
+    local lFailed := .F. as logical
+    local oErr    as object
+
+    begin sequence
+        bHook := &("{|u| " + cFuncName + "(u)}")
+        uResult := Eval(bHook, uValue)
+    recover using oErr
+        lFailed := .T.
+    end sequence
+
+    if lFailed
+        FWLogMsg("GqlFieldHooks: a configured hook failed (missing function or runtime error), using original value", .F.)
+        return uValue
+    endif
+    return uResult

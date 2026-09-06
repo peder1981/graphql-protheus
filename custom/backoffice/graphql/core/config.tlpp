@@ -19,6 +19,7 @@ class GqlConfig
     private data aAllowMutations     as array
     private data oGroupPermissions   as json
     private data lAuthEnforced       as logical
+    private data oFieldHooks         as json
     private data nDefaultPageSize    as numeric
     private data nMaxPageSize        as numeric
     private data nSchemaCacheTtlSecs as numeric
@@ -29,6 +30,7 @@ class GqlConfig
     public method getAllowMutations() as array
     public method getGroupPermissions() as json
     public method isAuthEnforced() as logical
+    public method getFieldHooks() as json
     public method getDefaultPageSize() as numeric
     public method getMaxPageSize() as numeric
     public method getSchemaCacheTtlSeconds() as numeric
@@ -48,6 +50,7 @@ method new() as object class GqlConfig
     ::aAllowMutations     := {}
     ::oGroupPermissions   := JsonObject():New()
     ::lAuthEnforced       := .F.
+    ::oFieldHooks         := JsonObject():New()
     ::nDefaultPageSize    := 20
     ::nMaxPageSize        := 200
     ::nSchemaCacheTtlSecs := 3600
@@ -80,6 +83,9 @@ method new() as object class GqlConfig
     if oJson["authEnforced"] != nil
         ::lAuthEnforced := oJson["authEnforced"]
     endif
+    if oJson["fieldHooks"] != nil
+        ::oFieldHooks := oJson["fieldHooks"]
+    endif
     if oJson["schemaCacheTtlSeconds"] != nil
         ::nSchemaCacheTtlSecs := oJson["schemaCacheTtlSeconds"]
     endif
@@ -110,6 +116,9 @@ method getGroupPermissions() as json class GqlConfig
 
 method isAuthEnforced() as logical class GqlConfig
     return ::lAuthEnforced
+
+method getFieldHooks() as json class GqlConfig
+    return ::oFieldHooks
 
 method getDefaultPageSize() as numeric class GqlConfig
     return ::nDefaultPageSize
