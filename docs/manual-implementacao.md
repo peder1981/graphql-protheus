@@ -265,7 +265,9 @@ Este motor faz parte de um roteiro maior em 6 sub-projetos:
    validação end-to-end de um hook bem-sucedido depende de resolver uma
    limitação de ambiente com despacho dinâmico de função nova — ver
    `docs/superpowers/specs/2026-09-06-graphql-field-hooks-design.md`
-5. **SDK Generator** — geração de contratos AdvPL a partir do schema
+5. **SDK Generator** — implementado e validado ao vivo (`?sdk=<TABLE>`
+   gera classe TLPP tipada) — ver
+   `docs/superpowers/specs/2026-09-06-graphql-sdk-generator-design.md`
 6. **Console PO-UI** — interface administrativa
 
 Cada sub-projeto tem sua própria especificação em

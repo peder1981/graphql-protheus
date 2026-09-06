@@ -7,6 +7,7 @@ GQLSERVICE
 Ponto de entrada REST GraphQL dinâmico sobre o dicionário de dados do Protheus.
 GET /rest/graphql              -> nomes dos tipos do schema (lista de bloqueio aplicada)
 GET /rest/graphql?type=<TABLE> -> detalhe completo do tipo de uma tabela
+GET /rest/graphql?sdk=<TABLE>  -> classe TLPP tipada gerada para a tabela
 GET /rest/graphql?query=<...>  -> execução completa da consulta
 @type User Function
 @author GraphQL Engine Team
@@ -24,6 +25,8 @@ User Function GQLSERVICE() as logical
     local jParams    as json
     local cQuery     := "" as character
     local cTypeName  := "" as character
+    local cSdkTable  := "" as character
+    local cSdkSrc    := "" as character
     local oResult    as json
     local oExecutor  as object
     local oPeekParser as object
@@ -32,15 +35,20 @@ User Function GQLSERVICE() as logical
     local oMutValidator as object
     local oMutWriter  as object
     local oMutExecutor as object
+    local oSdkGen      as object
 
     jParams   := oRest:getQueryRequest()
     cQuery    := jParams:GetJsonText("query")
     cTypeName := jParams:GetJsonText("type")
+    cSdkTable := jParams:GetJsonText("sdk")
     if cQuery == "null"
         cQuery := ""
     endif
     if cTypeName == "null"
         cTypeName := ""
+    endif
+    if cSdkTable == "null"
+        cSdkTable := ""
     endif
 
     if !empty(cQuery)
@@ -58,6 +66,16 @@ User Function GQLSERVICE() as logical
         else
             oExecutor := custom.backoffice.graphql.GqlExecutor():new(oSchema, oDict, custom.backoffice.graphql.GqlQueryBuilder():new(oConfig), oAccess, oFieldHooks)
             oResult := oExecutor:execute(cQuery)
+        endif
+    elseif !empty(cSdkTable)
+        if oSchema:getType(upper(alltrim(cSdkTable))) == nil
+            oResult := custom.backoffice.graphql.GqlErrors():single("Unknown or restricted type: " + cSdkTable)
+        else
+            oSdkGen := custom.backoffice.graphql.GqlSdkGenerator():new(oDict)
+            cSdkSrc := oSdkGen:generate(cSdkTable)
+            oResult := JsonObject():New()
+            oResult["data"] := JsonObject():New()
+            oResult["data"]["sdk"] := cSdkSrc
         endif
     elseif !empty(cTypeName)
         oResult := custom.backoffice.graphql.GqlIntrospection():typeDetail(oSchema, cTypeName)

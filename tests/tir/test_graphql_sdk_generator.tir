@@ -1,0 +1,37 @@
+"""
+Teste TIR - SDK Generator: gera classe TLPP tipada por tabela
+"""
+from contrib.tir import Webapp
+import json
+import urllib.parse
+
+
+class TestGraphQLSdkGenerator:
+    def setup_class(self):
+        self.client = Webapp("totvs.rest")
+        self.client.logon()
+
+    def teardown_class(self):
+        self.client.close()
+
+    def test_sdk_generates_class_per_table(self):
+        result = self.client.http_get("/graphql?sdk=SA1")
+        data = json.loads(result.text)
+        assert "data" in data
+        src = data["data"]["sdk"]
+        assert "class GqlSdkSA1" in src
+        assert "public data A1_COD as character" in src
+        assert "method fromJson" in src
+        assert 'oRow["A1_COD"]' in src
+
+    def test_sdk_denied_table_errors(self):
+        result = self.client.http_get("/graphql?sdk=SRA")
+        data = json.loads(result.text)
+        assert "errors" in data
+        assert "Unknown or restricted type" in data["errors"][0]["message"]
+
+    def test_sdk_unknown_table_errors(self):
+        result = self.client.http_get("/graphql?sdk=ZZZZZZ")
+        data = json.loads(result.text)
+        assert "errors" in data
+        assert "Unknown or restricted type" in data["errors"][0]["message"]

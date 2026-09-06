@@ -1,6 +1,7 @@
 # GraphQL SDK Generator - Contratos AdvPL a partir do Schema
 
-Status: aprovado para planejamento
+Status: implementado e validado ao vivo (unico sub-projeto deste
+roteiro sem limitacao de ambiente pendente)
 Data: 2026-09-06
 Sub-projeto: 5 de 6 (Core Engine -> Mutations -> Auth -> Field Hooks -> **SDK Generator** -> Console PO-UI)
 
@@ -135,6 +136,23 @@ seria testar o COMPILADOR AdvPL, fora de escopo):
   um texto de classe.
 - `test_graphql_sdk_unknown_table_errors.tir` — `?sdk=ZZZZZZ` (tabela
   inexistente) devolve erro, nao uma classe vazia.
+
+## Validado ao vivo (implementacao, 2026-09-06)
+
+Ao contrario dos sub-projetos Auth e Field Hooks, este nao depende de
+nenhum recurso do ambiente de teste que estivesse faltando ou quebrado -
+so texto montado a partir de metadados ja lidos com sucesso pela leitura
+normal. `GET /rest/graphql?sdk=SA1` devolveu a classe completa
+(`class GqlSdkSA1`, um `data` por campo, `fromJson` correto, tipos
+numericos mapeados certos - `A1_COMIS`/`A1_LC`/etc como `numeric`, resto
+`character`); `?sdk=SRA` (bloqueada) e `?sdk=ZZZZZZ` (inexistente)
+devolveram o mesmo erro que `?type=` ja usa. Unico ajuste de
+implementacao sobre o desenhado no spec: a resposta e sempre o mesmo
+envelope JSON do resto do motor (`{"data":{"sdk": "<texto>"}}` no
+sucesso, `{"errors":[...]}` no erro) em vez de `Content-Type: text/plain`
+dedicado - mantem o entrypoint uniforme (sempre chama `oResult:toJson()`
+uma unica vez), sem introduzir um segundo formato de resposta so para
+este caso.
 
 ## Dependencias para sub-projetos seguintes
 

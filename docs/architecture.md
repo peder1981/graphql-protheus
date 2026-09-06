@@ -148,3 +148,15 @@ macro, mesmo após restart completo do container — limitação de
 ambiente, não do código — e a degradação segura observada é exatamente
 a garantia de segurança que o sub-projeto pede. Detalhes completos em
 `docs/superpowers/specs/2026-09-06-graphql-field-hooks-design.md`.
+
+## SDK Generator (contratos AdvPL tipados)
+
+`GET /rest/graphql?sdk=<TABLE>` devolve, via `GqlSdkGenerator`
+(core/sdk-generator.tlpp), o texto-fonte de uma classe TLPP
+(`GqlSdk<TABLE>`) com um `data` tipado por campo escalar visível e um
+método `fromJson(oRow)` — reaproveita 100% os mesmos metadados de
+`GqlDictionaryReader:getTableFields()` que a leitura normal já usa, sem
+consultar o dicionário por conta própria (o SDK gerado nunca diverge do
+schema real). Validado ao vivo, sem limitação de ambiente pendente —
+único sub-projeto do roteiro nessa condição até aqui. Detalhes completos
+em `docs/superpowers/specs/2026-09-06-graphql-sdk-generator-design.md`.

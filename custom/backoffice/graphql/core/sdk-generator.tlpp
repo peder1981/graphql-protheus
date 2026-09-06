@@ -1,0 +1,100 @@
+#include "tlpp-core.th"
+#include "totvs.ch"
+
+namespace custom.backoffice.graphql
+
+/*/{Protheus.doc}
+@type Objeto
+@author GraphQL Engine Team
+@since 3.4.0
+@desc GqlSdkGenerator - monta texto-fonte TLPP de uma classe tipada
+      (GqlSdk<TABLE>) a partir dos MESMOS metadados que o schema de
+      leitura ja usa (GqlDictionaryReader:getTableFields()) - nunca
+      consulta o dicionario por conta propria, para nunca divergir do
+      schema real. So tipos de leitura (sem SDK de mutation); campos de
+      relacionamento nao entram na classe gerada (fora de escopo, ver
+      spec deste sub-projeto).
+/@*/
+class GqlSdkGenerator
+    private data oDictionaryReader as object
+
+    public method new(oDictionaryReader as object) as object
+    public method generate(cTable as character) as character
+    method advplType(cGraphqlType as character) as character
+endclass
+
+method new(oDictionaryReader as object) as object class GqlSdkGenerator
+    ::oDictionaryReader := oDictionaryReader
+    return self
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.4.0
+@param cTable Character - table alias, e.g. "SA1"
+@return Character - TLPP source text for class GqlSdk<TABLE>, or "" if
+        the table has no visible fields (blocked or unknown - caller
+        decides how to report that, this method never raises an error)
+/@*/
+method generate(cTable as character) as character class GqlSdkGenerator
+    local cTableUp   := upper(alltrim(cTable)) as character
+    local aFields    := ::oDictionaryReader:getTableFields(cTableUp) as array
+    local cClassName := "GqlSdk" + cTableUp as character
+    local cSrc       := "" as character
+    local cFieldList := "" as character
+    local cDataLines := "" as character
+    local cFromJson  := "" as character
+    local nI         := 0 as numeric
+    local cType      as character
+
+    if len(aFields) == 0
+        return ""
+    endif
+
+    for nI := 1 to len(aFields)
+        cType := ::advplType(aFields[nI]["graphqlType"])
+        cDataLines += "    public data " + aFields[nI]["name"] + " as " + cType + chr(13) + chr(10)
+        cFromJson  += "    ::" + aFields[nI]["name"] + " := oRow[" + '"' + aFields[nI]["name"] + '"' + "]" + chr(13) + chr(10)
+        if !empty(cFieldList)
+            cFieldList += " "
+        endif
+        cFieldList += aFields[nI]["name"]
+    next nI
+
+    cSrc := "#include " + '"tlpp-core.th"' + chr(13) + chr(10) + chr(13) + chr(10)
+    cSrc += "/*/{Protheus.doc}" + chr(13) + chr(10)
+    cSrc += "@type Objeto" + chr(13) + chr(10)
+    cSrc += "@desc " + cClassName + " - contrato tipado gerado a partir do schema GraphQL de " + cTableUp + "." + chr(13) + chr(10)
+    cSrc += "      Query de exemplo: { " + cTableUp + "(limit: 20) { " + cFieldList + " } }" + chr(13) + chr(10)
+    cSrc += "@since gerado automaticamente - nao editar a mao, regerar via" + chr(13) + chr(10)
+    cSrc += "       GET /rest/graphql?sdk=" + cTableUp + chr(13) + chr(10)
+    cSrc += "/@*/" + chr(13) + chr(10)
+    cSrc += "class " + cClassName + chr(13) + chr(10)
+    cSrc += cDataLines
+    cSrc += chr(13) + chr(10)
+    cSrc += "    public method new() as object" + chr(13) + chr(10)
+    cSrc += "    public method fromJson(oRow as json) as object" + chr(13) + chr(10)
+    cSrc += "endclass" + chr(13) + chr(10) + chr(13) + chr(10)
+    cSrc += "method new() as object class " + cClassName + chr(13) + chr(10)
+    cSrc += "    return self" + chr(13) + chr(10) + chr(13) + chr(10)
+    cSrc += "method fromJson(oRow as json) as object class " + cClassName + chr(13) + chr(10)
+    cSrc += cFromJson
+    cSrc += "    return self" + chr(13) + chr(10)
+
+    return cSrc
+
+/*/{Protheus.doc}
+@type Method
+@author GraphQL Engine Team
+@since 3.4.0
+@param cGraphqlType Character - GraphQL scalar name ("String"/"Int"/"Float"/"Boolean")
+@return Character - AdvPL type annotation for a "data" declaration
+/@*/
+method advplType(cGraphqlType as character) as character class GqlSdkGenerator
+    if cGraphqlType == "Int" .or. cGraphqlType == "Float"
+        return "numeric"
+    endif
+    if cGraphqlType == "Boolean"
+        return "logical"
+    endif
+    return "character"
