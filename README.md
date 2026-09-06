@@ -104,6 +104,26 @@ Detalhe do tipo `SA1`: campos, tipos e valores expostos via introspection.
 > dicionário completo, as relações listadas via SX9 são expostas como
 > sub-campos aninhados no tipo.
 
+### 5. Console (`console/index.html`)
+
+Página estática de exploração/administração (sub-projeto 6), aberta num
+navegador real e apontada para o mesmo AppServer. Schema real com
+10.409 tabelas — a lista nunca renderiza mais que 200 linhas de uma vez
+(filtro de texto ou as 200 primeiras), achado confirmado ao vivo (ver
+`docs/superpowers/specs/2026-09-06-graphql-console-design.md`).
+
+<img src="docs/screenshots/console-home.png" alt="Console - tela inicial, 10409 tabelas" width="720">
+
+Filtro por texto ("SA1") reduz a lista para 1 resultado; aba "Campos da
+tabela" mostra os campos de `SA1` já com o botão "Baixar SDK":
+
+<img src="docs/screenshots/console-fields.png" alt="Console - filtro de tabelas e campos de SA1" width="720">
+
+Execução de uma query real (`{ SA1(limit: 5) { ... } }`) com o resultado
+formatado:
+
+<img src="docs/screenshots/console-query.png" alt="Console - execução de query" width="720">
+
 ## Testes
 
 Testes TIR (Python e2e) em `tests/tir/`. Execute com `pytest tests/tir/ -v`
@@ -111,14 +131,17 @@ contra um AppServer Protheus com este RPO implantado.
 
 ## Roteiro de sub-projetos
 
-Este é os sub-projetos 1-5 de 6: Core Engine + Mutations + Auth + Field
-Hooks + SDK Generator (este repositório) → Console PO-UI. Auth
+Roteiro completo (6 de 6) implementado neste repositório: Core Engine +
+Mutations + Auth + Field Hooks + SDK Generator + Console. Auth
 (autenticação nativa `[HTTPREST] Security=1` + autorização por
 grupo/`groupPermissions`, opt-in via `authEnforced` na config) e Field
 Hooks (extensão por campo via `fieldHooks`, `onRead`/`onWrite`) estão
 implementados, com a ativação/validação end-to-end de ambos dependendo
 de limitações deste ambiente de teste específico — ver "Achados
 empíricos" nas respectivas specs. **SDK Generator**
-(`GET /rest/graphql?sdk=<TABLE>` → classe TLPP tipada) foi validado ao
-vivo sem ressalvas. Veja as specs de design para o roteiro completo e
-como cada sub-projeto posterior se encaixa neste motor.
+(`GET /rest/graphql?sdk=<TABLE>` → classe TLPP tipada) e **Console**
+(`console/index.html`, página estática de exploração/administração —
+decisão tomada com o operador em vez do "Console PO-UI"/Angular
+originalmente previsto) foram validados ao vivo sem ressalvas. Veja as
+specs de design (`docs/superpowers/specs/`) para o histórico completo
+de decisões de cada sub-projeto.

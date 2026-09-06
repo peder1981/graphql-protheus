@@ -268,7 +268,9 @@ Este motor faz parte de um roteiro maior em 6 sub-projetos:
 5. **SDK Generator** — implementado e validado ao vivo (`?sdk=<TABLE>`
    gera classe TLPP tipada) — ver
    `docs/superpowers/specs/2026-09-06-graphql-sdk-generator-design.md`
-6. **Console PO-UI** — interface administrativa
+6. **Console** — implementado e validado ao vivo (`console/index.html`,
+   página estática sem Angular/PO-UI — decisão tomada com o operador) —
+   ver `docs/superpowers/specs/2026-09-06-graphql-console-design.md`
 
 Cada sub-projeto tem sua própria especificação em
 `docs/superpowers/specs/`.

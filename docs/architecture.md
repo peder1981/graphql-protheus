@@ -160,3 +160,16 @@ consultar o dicionário por conta própria (o SDK gerado nunca diverge do
 schema real). Validado ao vivo, sem limitação de ambiente pendente —
 único sub-projeto do roteiro nessa condição até aqui. Detalhes completos
 em `docs/superpowers/specs/2026-09-06-graphql-sdk-generator-design.md`.
+
+## Console (exploração/administração)
+
+`console/index.html` — página estática (HTML/CSS/JS puro, sem
+Angular/PO-UI/npm, decisão tomada com o operador em vez do "Console
+PO-UI" que o roteiro original previa) que reaproveita 100% os endpoints
+REST já expostos: console de query, navegador de tabelas via
+introspecção, botão "baixar SDK" por tabela. Validada ao vivo num
+navegador real. Achado importante: o schema deste projeto tem **10.409
+tabelas** — renderizar uma linha por tabela sem paginação travou o
+Chrome de verdade; a lista nunca renderiza mais que 200 linhas de uma
+vez (filtro de texto ou as 200 primeiras). Detalhes completos em
+`docs/superpowers/specs/2026-09-06-graphql-console-design.md`.

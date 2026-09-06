@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>GraphQL Protheus - Console</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f4f5f7; color: #1a1a1a; }
+  header { background: #1c3f60; color: #fff; padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header input { padding: 6px 10px; border-radius: 4px; border: 1px solid #3a5a7a; min-width: 320px; font-size: 13px; }
+  header button { padding: 6px 12px; border-radius: 4px; border: none; background: #2e8b57; color: #fff; cursor: pointer; font-size: 13px; }
+  main { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 16px; height: calc(100vh - 60px); }
+  #tablesPanel { display: flex; flex-direction: column; background: #fff; border-radius: 6px; padding: 10px; border: 1px solid #ddd; overflow: hidden; }
+  #tableFilter { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; margin-bottom: 8px; }
+  #tableCount { font-size: 11px; color: #888; margin-bottom: 6px; }
+  #tables { overflow-y: auto; flex: 1; }
+  #tables div { padding: 6px 8px; cursor: pointer; border-radius: 4px; font-size: 13px; }
+  #tables div:hover { background: #eef2f6; }
+  #tables div.active { background: #1c3f60; color: #fff; }
+  .panel { background: #fff; border-radius: 6px; padding: 12px; border: 1px solid #ddd; display: flex; flex-direction: column; }
+  #query { width: 100%; height: 110px; font-family: monospace; font-size: 13px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+  .row button { padding: 6px 12px; border-radius: 4px; border: 1px solid #1c3f60; background: #fff; color: #1c3f60; cursor: pointer; font-size: 13px; }
+  .row button.primary { background: #1c3f60; color: #fff; }
+  pre#result { flex: 1; overflow: auto; background: #0f1720; color: #d6e2ea; padding: 10px; border-radius: 4px; font-size: 12px; margin: 0; }
+  #fieldList { flex: 1; overflow: auto; font-size: 12px; }
+  #fieldList table { width: 100%; border-collapse: collapse; }
+  #fieldList th, #fieldList td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #eee; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .tabs button { padding: 6px 14px; border: 1px solid #ccc; border-bottom: none; background: #f0f0f0; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 13px; }
+  .tabs button.active { background: #fff; font-weight: 600; }
+  .tabpanel { display: none; flex: 1; flex-direction: column; }
+  .tabpanel.active { display: flex; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GraphQL Protheus - Console</h1>
+  <input id="baseUrl" placeholder="http://localhost:9996/rest/graphql">
+  <button id="connect">Conectar</button>
+</header>
+<main>
+  <div id="tablesPanel">
+    <input id="tableFilter" placeholder="Filtrar tabelas... (ex: SA1)">
+    <div id="tableCount">Conecte para listar tabelas</div>
+    <div id="tables"></div>
+  </div>
+
+  <div class="panel">
+    <div class="tabs">
+      <button class="active" data-tab="query">Query</button>
+      <button data-tab="fields">Campos da tabela</button>
+    </div>
+
+    <div class="tabpanel active" id="tab-query">
+      <textarea id="query">{ SA1(limit: 5) { A1_COD A1_NOME } }</textarea>
+      <div class="row">
+        <button class="primary" id="run">Executar</button>
+        <button id="clear">Limpar</button>
+      </div>
+      <pre id="result">-- resultado aparece aqui --</pre>
+    </div>
+
+    <div class="tabpanel" id="tab-fields">
+      <div class="row">
+        <span id="fieldsTableName" style="font-weight:600;">Nenhuma tabela selecionada</span>
+        <button id="downloadSdk">Baixar SDK (.tlpp)</button>
+      </div>
+      <div id="fieldList"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ponytail: sem framework - a pagina inteira e fetch() + DOM puro contra
+// os endpoints REST que o motor GraphQL ja expoe (schema/type/sdk/query),
+// sem nenhum endpoint novo no lado do Protheus.
+const $ = (sel) => document.querySelector(sel);
+let baseUrl = localStorage.getItem("gqlConsoleBaseUrl") || "http://localhost:9996/rest/graphql";
+let currentTable = null;
+let allTableNames = [];
+// ponytail: schemas Protheus reais tem milhares de tabelas (10k+ neste
+// ambiente de teste) - renderizar uma div por tabela travou o Chrome de
+// verdade (confirmado ao vivo). So renderiza apos o usuario filtrar, com
+// um teto de resultados, em vez de listar tudo sempre.
+const MAX_RENDERED_TABLES = 200;
+
+$("#baseUrl").value = baseUrl;
+
+function renderFilteredTables() {
+  const term = $("#tableFilter").value.trim().toUpperCase();
+  const matches = term
+    ? allTableNames.filter(n => n.includes(term))
+    : allTableNames.slice(0, MAX_RENDERED_TABLES);
+  const shown = matches.slice(0, MAX_RENDERED_TABLES);
+  $("#tableCount").textContent =
+    allTableNames.length + " tabelas no schema" +
+    (matches.length > shown.length ? " - mostrando " + shown.length + " (refine o filtro)" : (term ? " - " + matches.length + " encontrada(s)" : " - mostrando as primeiras " + shown.length));
+  const el = $("#tables");
+  el.innerHTML = "";
+  shown.forEach(name => {
+    const div = document.createElement("div");
+    div.textContent = name;
+    if (name === currentTable) div.classList.add("active");
+    div.addEventListener("click", () => selectTable(name, div));
+    el.appendChild(div);
+  });
+}
+$("#tableFilter").addEventListener("input", renderFilteredTables);
+
+function setTab(name) {
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tabpanel").forEach(p => p.classList.toggle("active", p.id === "tab-" + name));
+}
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+async function loadTables() {
+  const res = await fetch(baseUrl);
+  const data = await res.json();
+  const names = (data.data && data.data.__schema && data.data.__schema.types) || [];
+  allTableNames = names.map(t => t.name);
+  renderFilteredTables();
+}
+
+async function selectTable(name, div) {
+  document.querySelectorAll("#tables div").forEach(d => d.classList.remove("active"));
+  if (div) div.classList.add("active");
+  currentTable = name;
+  $("#fieldsTableName").textContent = name;
+  setTab("fields");
+
+  const res = await fetch(baseUrl + "?type=" + encodeURIComponent(name));
+  const data = await res.json();
+  const fields = (data.data && data.data.__type && data.data.__type.fields) || [];
+  const rows = fields.map(f =>
+    "<tr><td>" + f.name + "</td><td>" + f.graphqlType + "</td><td>" + (f.required ? "sim" : "") + "</td></tr>"
+  ).join("");
+  $("#fieldList").innerHTML =
+    "<table><tr><th>Campo</th><th>Tipo</th><th>Obrigatorio</th></tr>" + rows + "</table>";
+
+  $("#query").value = "{ " + name + "(limit: 5) { " + fields.slice(0, 5).map(f => f.name).join(" ") + " } }";
+}
+
+$("#connect").addEventListener("click", () => {
+  baseUrl = $("#baseUrl").value.trim() || baseUrl;
+  localStorage.setItem("gqlConsoleBaseUrl", baseUrl);
+  loadTables().catch(err => { $("#result").textContent = "Erro ao conectar: " + err; });
+});
+
+$("#run").addEventListener("click", async () => {
+  const q = $("#query").value;
+  $("#result").textContent = "Executando...";
+  try {
+    const res = await fetch(baseUrl + "?query=" + encodeURIComponent(q));
+    const data = await res.json();
+    $("#result").textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    $("#result").textContent = "Erro: " + err;
+  }
+});
+
+$("#clear").addEventListener("click", () => { $("#query").value = ""; $("#result").textContent = ""; });
+
+$("#downloadSdk").addEventListener("click", async () => {
+  if (!currentTable) return;
+  const res = await fetch(baseUrl + "?sdk=" + encodeURIComponent(currentTable));
+  const data = await res.json();
+  const src = (data.data && data.data.sdk) || ("// erro: " + JSON.stringify(data));
+  const blob = new Blob([src], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "GqlSdk" + currentTable + ".tlpp";
+  a.click();
+});
+
+if (baseUrl) { loadTables().catch(() => {}); }
+</script>
+</body>
+</html>
