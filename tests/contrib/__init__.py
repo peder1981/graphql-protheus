@@ -1,0 +1,1 @@
+# Empty: makes contrib/ a namespace for the minimal TIR REST harness.

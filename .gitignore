@@ -4,3 +4,5 @@ build/
 
 # Artefatos intermediários do gerador de PDFs
 docs/pdf/*.html
+__pycache__/
+*.pyc

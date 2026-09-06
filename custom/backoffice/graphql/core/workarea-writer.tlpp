@@ -36,7 +36,7 @@ class GqlWorkareaWriter
     private data oDictionaryReader as object
 
     public method new(oDictionaryReader as object) as object
-    public method writeCreate(cTable as character, cFilialField as character, oInput as json, aFieldNames as array) as logical
+    public method writeCreate(cTable as character, cFilialField as character, oInput as json, aFieldNames as array, aKeyFields as array) as logical
     public method writeUpdate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, aSetFields as array) as logical
     public method writeSoftDelete(cTable as character, cFilialField as character, oInput as json, aKeyFields as array) as logical
     method fieldMeta(cTable as character) as json
@@ -96,15 +96,38 @@ method fieldMeta(cTable as character) as json class GqlWorkareaWriter
 @param cFilialField Character - real branch field name, or ""
 @param oInput JSON - validated create input (flat field map)
 @param aFieldNames Array - field names to write, from oInput's keys
-@return Logical - .T. on successful include
+@param aKeyFields Array - the table's key fields (order-1), used only for
+       the pre-flight existence check below - never sent to FieldPut
+@return Logical - .T. on successful include, .F. if the key already
+        exists on an active row, or on any other write failure
 @desc Opens cTable on a workarea, RecLock(cTable,.T.) to create a new
       record, FieldPut per provided field (cast to the physical DB type).
       The filial field is always forced to cFilAnt (never from oInput) and
       D_E_L_E_T_ is set to ' ' (space) so read-path filters (D_E_L_E_T_=' ')
       find the new row. Closes with MsUnlock(). R_E_C_N_O_ is assigned
       atomically by the ISAM/DBAccess layer - never written here.
+
+      Pre-flight existence check (::locate()) runs BEFORE RecLock(.T.) -
+      confirmed empirically that a unique-key violation on this Postgres
+      backend surfaces ASYNCHRONOUSLY (a separate DBAccess I/O flush,
+      logged via the framework's global ErrorBlock/CATCHERRORREST on a
+      different execution context) rather than as a synchronous runtime
+      error at MsUnlock() itself - a `begin sequence/recover using` wrapped
+      around MsUnlock() was tested live and does NOT catch it; writeCreate
+      returns .T. immediately, and the client gets back the PRE-EXISTING
+      row's stale data looking like a successful create, with the
+      duplicate-key error only visible in the server console. The
+      pre-flight check closes the ordinary case (a client creating a key
+      that's already active) deterministically. A genuine race - two
+      creates for the same brand-new key arriving within the same instant
+      - can still slip past this check, same residual risk tier as the
+      R_E_C_N_O_ concurrency limitation documented elsewhere in this file;
+      the `begin sequence/recover using` around MsUnlock() is kept as
+      defense-in-depth for other, genuinely synchronous runtime errors
+      (e.g. a FieldPut type mismatch), even though it's confirmed
+      ineffective for this specific async failure mode.
 /@*/
-method writeCreate(cTable as character, cFilialField as character, oInput as json, aFieldNames as array) as logical class GqlWorkareaWriter
+method writeCreate(cTable as character, cFilialField as character, oInput as json, aFieldNames as array, aKeyFields as array) as logical class GqlWorkareaWriter
     local aArea := GetArea() as array
     local lOk   := .F. as logical
     local nI    := 0 as numeric
@@ -113,35 +136,45 @@ method writeCreate(cTable as character, cFilialField as character, oInput as jso
     local cType := "" as character
     local oMeta := ::fieldMeta(cTable) as json
     local oF    as json
+    local oErr  as object
 
     DbSelectArea(cTable)
-    lOk := RecLock(cTable, .T.)
-    if lOk
-        for nI := 1 to len(aFieldNames)
-            cName := aFieldNames[nI]
-            oF := oMeta[cName]
-            nPos := FieldPos(cName)
-            if oF != nil .and. nPos > 0
-                cType := oF["type"]
-                FieldPut(nPos, ::castValue(cType, oInput[cName]))
-            endif
-        next nI
-
-        if !empty(cFilialField)
-            nPos := FieldPos(cFilialField)
-            if nPos > 0
-                FieldPut(nPos, cFilAnt)
-            endif
-        endif
-
-        nPos := FieldPos("D_E_L_E_T_")
-        if nPos > 0
-            FieldPut(nPos, " ")
-        endif
-
-        MsUnlock()
-        lOk := .T.
+    if len(aKeyFields) > 0 .and. ::locate(cTable, cFilialField, oInput, aKeyFields, oMeta)
+        RestArea(aArea)
+        return .F.
     endif
+    begin sequence
+        lOk := RecLock(cTable, .T.)
+        if lOk
+            for nI := 1 to len(aFieldNames)
+                cName := aFieldNames[nI]
+                oF := oMeta[cName]
+                nPos := FieldPos(cName)
+                if oF != nil .and. nPos > 0
+                    cType := oF["type"]
+                    FieldPut(nPos, ::castValue(cType, oInput[cName]))
+                endif
+            next nI
+
+            if !empty(cFilialField)
+                nPos := FieldPos(cFilialField)
+                if nPos > 0
+                    FieldPut(nPos, cFilAnt)
+                endif
+            endif
+
+            nPos := FieldPos("D_E_L_E_T_")
+            if nPos > 0
+                FieldPut(nPos, " ")
+            endif
+
+            MsUnlock()
+            lOk := .T.
+        endif
+    recover using oErr
+        lOk := .F.
+        MsUnlock()
+    end sequence
     RestArea(aArea)
     return lOk
 
@@ -160,7 +193,10 @@ method writeCreate(cTable as character, cFilialField as character, oInput as jso
       built from aKeyFields (the SX3 metadata in oMeta), skips soft-deleted
       rows (D_E_L_E_T_ <> ' '), then RecLock(cTable,.F.) and FieldPut per
       SET field (cast by SX3 type). The filial key component, like in every
-      write, is forced from cFilAnt. Closes with MsUnlock().
+      write, is forced from cFilAnt. Closes with MsUnlock(). Any runtime
+      error (e.g. a unique-index violation from a concurrent write) is
+      caught and turned into a .F. return, never left to crash the whole
+      REST request with an opaque HTTP 500.
 /@*/
 method writeUpdate(cTable as character, cFilialField as character, oInput as json, aKeyFields as array, aSetFields as array) as logical class GqlWorkareaWriter
     local aArea := GetArea() as array
@@ -171,25 +207,31 @@ method writeUpdate(cTable as character, cFilialField as character, oInput as jso
     local cType := "" as character
     local oMeta := ::fieldMeta(cTable) as json
     local oF    as json
+    local oErr  as object
 
     DbSelectArea(cTable)
-    lOk := ::locate(cTable, cFilialField, oInput, aKeyFields, oMeta)
-    if lOk
-        lOk := RecLock(cTable, .F.)
+    begin sequence
+        lOk := ::locate(cTable, cFilialField, oInput, aKeyFields, oMeta)
         if lOk
-            for nI := 1 to len(aSetFields)
-                cName := aSetFields[nI]
-                oF := oMeta[cName]
-                nPos := FieldPos(cName)
-                if oF != nil .and. nPos > 0
-                    cType := oF["type"]
-                    FieldPut(nPos, ::castValue(cType, oInput[cName]))
-                endif
-            next nI
-            MsUnlock()
-            lOk := .T.
+            lOk := RecLock(cTable, .F.)
+            if lOk
+                for nI := 1 to len(aSetFields)
+                    cName := aSetFields[nI]
+                    oF := oMeta[cName]
+                    nPos := FieldPos(cName)
+                    if oF != nil .and. nPos > 0
+                        cType := oF["type"]
+                        FieldPut(nPos, ::castValue(cType, oInput[cName]))
+                    endif
+                next nI
+                MsUnlock()
+                lOk := .T.
+            endif
         endif
-    endif
+    recover using oErr
+        lOk := .F.
+        MsUnlock()
+    end sequence
     RestArea(aArea)
     return lOk
 
@@ -205,22 +247,29 @@ method writeUpdate(cTable as character, cFilialField as character, oInput as jso
 @desc Same locate logic as writeUpdate, then RecLock(cTable,.F.) and
       FieldPut D_E_L_E_T_ = '*' (soft delete). Never touches an already
       deleted row (locate rejects D_E_L_E_T_ <> ' '). Closes with
-      MsUnlock().
+      MsUnlock(). Any runtime error during the delete is caught and
+      turned into a .F. return, same as writeCreate/writeUpdate.
 /@*/
 method writeSoftDelete(cTable as character, cFilialField as character, oInput as json, aKeyFields as array) as logical class GqlWorkareaWriter
     local aArea := GetArea() as array
     local lOk   := .F. as logical
+    local oErr  as object
 
     DbSelectArea(cTable)
-    lOk := ::locate(cTable, cFilialField, oInput, aKeyFields, ::fieldMeta(cTable))
-    if lOk
-        lOk := RecLock(cTable, .F.)
+    begin sequence
+        lOk := ::locate(cTable, cFilialField, oInput, aKeyFields, ::fieldMeta(cTable))
         if lOk
-            DbDelete()
-            MsUnlock()
-            lOk := .T.
+            lOk := RecLock(cTable, .F.)
+            if lOk
+                DbDelete()
+                MsUnlock()
+                lOk := .T.
+            endif
         endif
-    endif
+    recover using oErr
+        lOk := .F.
+        MsUnlock()
+    end sequence
     RestArea(aArea)
     return lOk
 
