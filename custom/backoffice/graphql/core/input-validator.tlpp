@@ -8,7 +8,7 @@ namespace custom.backoffice.graphql
 @author GraphQL Engine Team
 @since 3.1.0
 @desc GqlInputValidator - valida o objeto de entrada de uma mutation contra
-      metadados do SX3 (obrigatï¿½rio/tipo/tamanho) antes de qualquer escrita.
+      metadados do SX3 (obrigatório/tipo/tamanho) antes de qualquer escrita.
 /@*/
 class GqlInputValidator
     private data oDictionaryReader as object

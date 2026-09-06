@@ -8,7 +8,7 @@ namespace custom.backoffice.graphql
 @author GraphQL Engine Team
 @since 3.1.0
 @desc GqlMutationExecutor - parseia um documento mutation, resolve cada
-      campo raiz para tabela+operaï¿½ï¿½o (createTABLE/updateTABLE/deleteTABLE),
+      campo raiz para tabela+operação (createTABLE/updateTABLE/deleteTABLE),
       valida e escreve via GqlInputValidator/GqlWorkareaWriter (workarea
       nativa RecLock/FieldPut/MsUnlock, nunca SQL), e retorna a linha
       afetada via o executor de leitura existente.
@@ -251,10 +251,10 @@ method keyFieldNames(cTable as character) as array class GqlMutationExecutor
     local nStart := 1 as numeric
     local nSep := 0 as numeric
 
-    // "+" ï¿½ o separador real de chave SIX do Protheus (ex.
+    // "+" é o separador real de chave SIX do Protheus (ex.
     // "A1_FILIAL+A1_COD+A1_LOJA", confirmado diretamente contra six990) - o
-    // fallback escalar de campo ï¿½nico de getOrderKey() nunca contï¿½m "+", entï¿½o
-    // este parsing ï¿½ correto para ambos os casos.
+    // fallback escalar de campo único de getOrderKey() nunca contém "+", então
+    // este parsing é correto para ambos os casos.
     nSep := at("+", cKey)
     while nSep > 0
         aAdd(aResult, alltrim(substr(cKey, nStart, nSep - nStart)))
@@ -323,12 +323,12 @@ method fetchByKey(cTable as character, oField as json, oInput as json, aKeyField
         if nI > 1
             cWhere += " AND "
         endif
-        // O campo de filial da chave nunca ï¿½ lido do oInput - mutations
-        // de create nï¿½o sï¿½o obrigadas a fornecï¿½-lo (ï¿½ sempre forï¿½ado de
-        // cFilAnt, exatamente como o GqlWorkareaWriter faz nas clï¿½usulas
+        // O campo de filial da chave nunca é lido do oInput - mutations
+        // de create não são obrigadas a fornecê-lo (é sempre forçado de
+        // cFilAnt, exatamente como o GqlWorkareaWriter faz nas cláusulas
         // WHERE de INSERT/UPDATE/DELETE). Update/delete exigem-no no oInput
-        // (validado pelo chamador), mas forï¿½ar cFilAnt aqui mantï¿½m a
-        // garantia de mesma filial consistente para toda operaï¿½ï¿½o.
+        // (validado pelo chamador), mas forçar cFilAnt aqui mantém a
+        // garantia de mesma filial consistente para toda operação.
         if !empty(cFilialField) .and. aKeyFields[nI] == cFilialField
             cKeyValue := cFilAnt
         else
@@ -341,13 +341,13 @@ method fetchByKey(cTable as character, oField as json, oInput as json, aKeyField
         aAdd(aParams, oP)
     next nI
 
-    // oField ï¿½ o campo raiz da mutation (ex. "createSA1"/"updateSA1"/"deleteSA1"):
-    // seu prï¿½prio nome Nï¿½O ï¿½ o nome da tabela, apenas seu selectionSet ï¿½
-    // reutilizï¿½vel aqui. GqlExecutor:resolveTableField deriva a tabela de
-    // oField["name"], entï¿½o um nï¿½ de campo sintï¿½tico nomeando a tabela real
-    // (cTable) precisa ser construï¿½do, reutilizando o selectionSet de oField
+    // oField é o campo raiz da mutation (ex. "createSA1"/"updateSA1"/"deleteSA1"):
+    // seu próprio nome NÃO é o nome da tabela, apenas seu selectionSet é
+    // reutilizável aqui. GqlExecutor:resolveTableField deriva a tabela de
+    // oField["name"], então um nó de campo sintético nomeando a tabela real
+    // (cTable) precisa ser construído, reutilizando o selectionSet de oField
     // e um objeto de argumentos vazio (nenhum filter/limit/offset deve
-    // vazar do prï¿½prio argumento "input" da mutation).
+    // vazar do próprio argumento "input" da mutation).
     oSynthField := JsonObject():New()
     oSynthField["name"] := cTable
     oSynthField["selectionSet"] := oField["selectionSet"]

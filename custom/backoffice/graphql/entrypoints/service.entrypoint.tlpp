@@ -4,10 +4,10 @@
 
 /*/{Protheus.doc}
 GQLSERVICE
-Ponto de entrada REST GraphQL dinï¿½mico sobre o dicionï¿½rio de dados do Protheus.
+Ponto de entrada REST GraphQL dinâmico sobre o dicionário de dados do Protheus.
 GET /rest/graphql              -> nomes dos tipos do schema (lista de bloqueio aplicada)
 GET /rest/graphql?type=<TABLE> -> detalhe completo do tipo de uma tabela
-GET /rest/graphql?query=<...>  -> execuï¿½ï¿½o completa da consulta
+GET /rest/graphql?query=<...>  -> execução completa da consulta
 @type User Function
 @author GraphQL Engine Team
 @since 3.0.0
